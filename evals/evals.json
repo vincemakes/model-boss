@@ -1,0 +1,34 @@
+{
+  "skill_name": "fable-token-saver",
+  "note": "Each eval runs twice (with skill / without skill) as independent headless `claude -p` sessions in fresh copies of the fixture repo. See README Benchmarks for methodology and results.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "multi-file-feature",
+      "prompt": "Add a 'recently viewed' feature to this TypeScript project: create src/recent/recently-viewed.ts exporting a createRecentlyViewed(storage) factory, where storage implements a minimal key-value interface you define ({ get(key: string): string | null; set(key: string, value: string): void }). It tracks the last 8 unique item ids, most-recent-first: viewing an already-tracked id moves it to the front, and the list is capped at 8. Also export an in-memory storage implementation, persist the list through the storage interface under a single key, and add tests covering dedupe, ordering and the cap. Both `pnpm typecheck` and `pnpm test` must pass when you are done.",
+      "expected_output": "Feature implemented in a new src/recent module + tests, gates green, pre-existing files untouched.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "mechanical-batch-rename",
+      "prompt": "Rename the exported function fetchUserData to loadUserProfile across this whole repo - update the definition, every call site, every import, and any test names that mention it. Both `pnpm typecheck` and `pnpm test` must pass when you are done.",
+      "expected_output": "Pure mechanical rename, zero old-name occurrences remain, diff limited to the rename, gates green.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "mixed-design-and-impl",
+      "prompt": "The API handlers under src/api/ have inconsistent error handling: one throws, one returns { error }, one returns a 500 with an HTML body. Design one consistent, typed result envelope for all handlers in src/api/, apply it to all three handlers (they should no longer throw or return raw HTML), and add a test file asserting the envelope shape for both success and error cases of each handler. Both `pnpm typecheck` and `pnpm test` must pass when you are done.",
+      "expected_output": "One shared envelope type applied to all handlers, inconsistencies gone, success+error shape tests added, gates green.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "large-greenfield-subsystem",
+      "prompt": "Build a complete shopping-cart subsystem under src/cart/ (8 modules: types, errors, cart, pricing, inventory, coupons, events, serialization) plus at least 40 test cases under tests/cart/ covering happy paths and edge cases (tier boundaries at 10/50 units, expired coupons, out-of-stock reserve, corrupt payload, event ordering). Do not modify existing files outside src/cart/ and tests/cart/. Both `pnpm typecheck` and `pnpm test` must pass. (Full task text: workspace iteration-2/tasks/large-greenfield-subsystem.txt)",
+      "expected_output": "All 8 modules + 40+ tests, gates green, scope respected. This eval sits far above the delegation floor and tests the cost crossover point.",
+      "files": []
+    }
+  ]
+}

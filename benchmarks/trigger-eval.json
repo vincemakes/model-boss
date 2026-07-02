@@ -1,0 +1,22 @@
+[
+  {"query": "my fable quota keeps running out mid-week. can you set things up so you only do the planning and review, and have sonnet write the actual code for this refactor of our billing module? it's like 12 files", "should_trigger": true},
+  {"query": "省token模式:把 src/pipeline 下面那套导出逻辑重写成流式的,大概要动七八个文件,你统筹,让便宜模型去写", "should_trigger": true},
+  {"query": "use the token saver thing to build out the admin dashboard CRUD pages we scoped yesterday - there are 9 resources, all following the same pattern", "should_trigger": true},
+  {"query": "delegate this to cheaper models and just review the diffs yourself: we need to migrate all 40+ API handlers to the new zod validation middleware", "should_trigger": true},
+  {"query": "i'm on the max plan and almost rate limited. orchestrate the implementation of the notification system (email + webhook + in-app, plus tests) instead of writing it all yourself", "should_trigger": true},
+  {"query": "can you act as orchestrator and farm out the coding to worker agents? task: implement CSV import with validation and tests, probably 500+ lines across new files", "should_trigger": true},
+  {"query": "这个任务挺大,重构整个 auth 模块还要补测试,你别自己写,派 sonnet 干活,你只负责拆任务和验收", "should_trigger": true},
+  {"query": "we have ~200 call sites that need to switch from moment() to dayjs. have a cheap model grind through all of them and you just check the result at the end", "should_trigger": true},
+  {"query": "build the entire scraper subsystem - fetcher, parser, rate limiter, storage layer, cli - use worker agents for the code so we don't burn your quota", "should_trigger": true},
+  {"query": "my boss wants this legacy jquery file (3k lines) converted to react components. split it into chunks and hand them to cheaper subagents with tests as the gate?", "should_trigger": true},
+  {"query": "how much does claude sonnet cost per million tokens compared to opus? trying to figure out our api bill", "should_trigger": false},
+  {"query": "can you review this diff for bugs before i merge? it's about 300 lines in the payments service", "should_trigger": false},
+  {"query": "fix the typo in the README installation section, it says 'insall'", "should_trigger": false},
+  {"query": "why is my vitest gate failing in CI but passing locally? same node version supposedly", "should_trigger": false},
+  {"query": "spawn a subagent to search the codebase for where we handle stripe webhooks, i can never find it", "should_trigger": false},
+  {"query": "my context window keeps filling up in long chats, how do i make you use fewer tokens when we talk?", "should_trigger": false},
+  {"query": "帮我看看这个 500 报错是哪来的,顺便修一下,应该就是那个接口的事", "should_trigger": false},
+  {"query": "which model should i pick in claude code for everyday coding? is opus overkill", "should_trigger": false},
+  {"query": "add a loading spinner to the submit button in Login.tsx while the request is pending", "should_trigger": false},
+  {"query": "run the test suite and tell me which three tests are slowest, thinking about splitting CI", "should_trigger": false}
+]

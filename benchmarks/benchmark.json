@@ -1,0 +1,420 @@
+{
+  "metadata": {
+    "skill_name": "fable-token-saver",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-07-02T16:18:50Z",
+    "evals_run": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 120.6,
+        "tokens": 32052,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "gate-typecheck-passes",
+          "passed": true,
+          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/fable-token-saver-workspace/iteration-1/multi-file-feature/with_skill/project\n> tsc --noEmit\n\n"
+        },
+        {
+          "text": "gate-tests-pass",
+          "passed": true,
+          "evidence": "tests/users.test.ts (2 tests) 2ms\n \u2713 tests/recently-viewed.test.ts (5 tests) 2ms\n \u2713 tests/profile.test.ts (2 tests) 1ms\n\n Test Files  3 passed (3)\n      Tests  9 passed (9)\n   Start at  23:55:37\n   Duration  200ms (transform 60ms, setup 0ms, collect 76ms, tests 5ms, environment 0ms, prepare 120ms)\n\n"
+        },
+        {
+          "text": "recent-module-created",
+          "passed": true,
+          "evidence": "src/recent/recently-viewed.ts:25:export function createRecentlyViewed(storage: Storage) {"
+        },
+        {
+          "text": "behavior-covered-by-tests",
+          "passed": true,
+          "evidence": "dedupe/cap keyword matches in recent tests: 4"
+        },
+        {
+          "text": "scope-respected",
+          "passed": true,
+          "evidence": "(unchanged)"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 83.0,
+        "tokens": 17866,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "gate-typecheck-passes",
+          "passed": true,
+          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/fable-token-saver-workspace/iteration-1/mechanical-batch-rename/with_skill/project\n> tsc --noEmit\n\n"
+        },
+        {
+          "text": "gate-tests-pass",
+          "passed": true,
+          "evidence": "echanical-batch-rename/with_skill/project\n\n \u2713 tests/users.test.ts (2 tests) 1ms\n \u2713 tests/profile.test.ts (2 tests) 1ms\n\n Test Files  2 passed (2)\n      Tests  4 passed (4)\n   Start at  23:55:39\n   Duration  232ms (transform 106ms, setup 0ms, collect 105ms, tests 2ms, environment 0ms, prepare 94ms)\n\n"
+        },
+        {
+          "text": "rename-complete",
+          "passed": true,
+          "evidence": "fetchUserData occurrences in src+tests: 0"
+        },
+        {
+          "text": "new-name-wired",
+          "passed": true,
+          "evidence": "loadUserProfile occurrences: 13"
+        },
+        {
+          "text": "no-drive-by-changes",
+          "passed": true,
+          "evidence": "files touched: ['get-user.ts', 'profile.ts', 'report.ts', 'users.test.ts', 'users.ts']"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 235.5,
+        "tokens": 51657,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "gate-typecheck-passes",
+          "passed": true,
+          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/fable-token-saver-workspace/iteration-1/mixed-design-and-impl/with_skill/project\n> tsc --noEmit\n\n"
+        },
+        {
+          "text": "gate-tests-pass",
+          "passed": true,
+          "evidence": " tests/users.test.ts (2 tests) 2ms\n \u2713 tests/profile.test.ts (2 tests) 2ms\n \u2713 tests/api-handlers.test.ts (8 tests) 3ms\n\n Test Files  3 passed (3)\n      Tests  12 passed (12)\n   Start at  23:55:41\n   Duration  215ms (transform 73ms, setup 0ms, collect 86ms, tests 6ms, environment 0ms, prepare 119ms)\n\n"
+        },
+        {
+          "text": "single-shared-envelope",
+          "passed": true,
+          "evidence": "files importing/defining ApiResult in src/api: 4 (3 handlers + result.ts)"
+        },
+        {
+          "text": "inconsistencies-eliminated",
+          "passed": true,
+          "evidence": "html occurrences in src/api: 0; get-user throw count: 0"
+        },
+        {
+          "text": "envelope-tests-added",
+          "passed": true,
+          "evidence": "test file: api-handlers.test.ts; it()/test() cases: 8"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 4,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "total": 6,
+        "time_seconds": 465.1,
+        "tokens": 67665,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "gate-typecheck-passes",
+          "passed": true,
+          "evidence": "tsc --noEmit exit 0"
+        },
+        {
+          "text": "gate-tests-pass",
+          "passed": true,
+          "evidence": "vitest: 8 files, 91/91 passed"
+        },
+        {
+          "text": "all-8-modules-exist",
+          "passed": true,
+          "evidence": "cart coupons errors events inventory pricing serialization types"
+        },
+        {
+          "text": "test-volume (>=40)",
+          "passed": true,
+          "evidence": "87 it()/test() cases under tests/cart/"
+        },
+        {
+          "text": "edge-cases-covered",
+          "passed": true,
+          "evidence": "expired/corrupt/out-of-stock keywords in 4 test files"
+        },
+        {
+          "text": "scope-respected",
+          "passed": true,
+          "evidence": "git diff outside src/cart+tests/cart is empty"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 53.4,
+        "tokens": 15063,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "gate-typecheck-passes",
+          "passed": true,
+          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/fable-token-saver-workspace/iteration-1/multi-file-feature/without_skill/project\n> tsc --noEmit\n\n"
+        },
+        {
+          "text": "gate-tests-pass",
+          "passed": true,
+          "evidence": "s/users.test.ts (2 tests) 2ms\n \u2713 tests/recently-viewed.test.ts (7 tests) 2ms\n \u2713 tests/profile.test.ts (2 tests) 1ms\n\n Test Files  3 passed (3)\n      Tests  11 passed (11)\n   Start at  23:55:38\n   Duration  232ms (transform 151ms, setup 0ms, collect 163ms, tests 5ms, environment 1ms, prepare 127ms)\n\n"
+        },
+        {
+          "text": "recent-module-created",
+          "passed": true,
+          "evidence": "src/recent/recently-viewed.ts:38:export function createRecentlyViewed(storage: KeyValueStorage): RecentlyViewed {"
+        },
+        {
+          "text": "behavior-covered-by-tests",
+          "passed": true,
+          "evidence": "dedupe/cap keyword matches in recent tests: 5"
+        },
+        {
+          "text": "scope-respected",
+          "passed": true,
+          "evidence": "(unchanged)"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 35.7,
+        "tokens": 13322,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "gate-typecheck-passes",
+          "passed": true,
+          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/fable-token-saver-workspace/iteration-1/mechanical-batch-rename/without_skill/project\n> tsc --noEmit\n\n"
+        },
+        {
+          "text": "gate-tests-pass",
+          "passed": true,
+          "evidence": "chanical-batch-rename/without_skill/project\n\n \u2713 tests/users.test.ts (2 tests) 1ms\n \u2713 tests/profile.test.ts (2 tests) 1ms\n\n Test Files  2 passed (2)\n      Tests  4 passed (4)\n   Start at  23:55:40\n   Duration  219ms (transform 71ms, setup 0ms, collect 72ms, tests 3ms, environment 0ms, prepare 75ms)\n\n"
+        },
+        {
+          "text": "rename-complete",
+          "passed": true,
+          "evidence": "fetchUserData occurrences in src+tests: 0"
+        },
+        {
+          "text": "new-name-wired",
+          "passed": true,
+          "evidence": "loadUserProfile occurrences: 13"
+        },
+        {
+          "text": "no-drive-by-changes",
+          "passed": true,
+          "evidence": "files touched: ['get-user.ts', 'profile.ts', 'report.ts', 'users.test.ts', 'users.ts']"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 84.4,
+        "tokens": 17185,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "gate-typecheck-passes",
+          "passed": true,
+          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/fable-token-saver-workspace/iteration-1/mixed-design-and-impl/without_skill/project\n> tsc --noEmit\n\n"
+        },
+        {
+          "text": "gate-tests-pass",
+          "passed": true,
+          "evidence": "ect\n\n \u2713 tests/users.test.ts (2 tests) 2ms\n \u2713 tests/profile.test.ts (2 tests) 1ms\n \u2713 tests/api.test.ts (6 tests) 2ms\n\n Test Files  3 passed (3)\n      Tests  10 passed (10)\n   Start at  23:55:42\n   Duration  233ms (transform 136ms, setup 0ms, collect 152ms, tests 5ms, environment 0ms, prepare 116ms)\n\n"
+        },
+        {
+          "text": "single-shared-envelope",
+          "passed": true,
+          "evidence": "files importing/defining ApiResult in src/api: 4 (3 handlers + result.ts)"
+        },
+        {
+          "text": "inconsistencies-eliminated",
+          "passed": true,
+          "evidence": "html occurrences in src/api: 0; get-user throw count: 0"
+        },
+        {
+          "text": "envelope-tests-added",
+          "passed": true,
+          "evidence": "test file: api.test.ts; it()/test() cases: 6"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 4,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "total": 6,
+        "time_seconds": 335.2,
+        "tokens": 43901,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "gate-typecheck-passes",
+          "passed": true,
+          "evidence": "tsc --noEmit exit 0"
+        },
+        {
+          "text": "gate-tests-pass",
+          "passed": true,
+          "evidence": "vitest: 8 files, 81/81 passed"
+        },
+        {
+          "text": "all-8-modules-exist",
+          "passed": true,
+          "evidence": "cart coupons errors events inventory pricing serialization types"
+        },
+        {
+          "text": "test-volume (>=40)",
+          "passed": true,
+          "evidence": "77 it()/test() cases under tests/cart/"
+        },
+        {
+          "text": "edge-cases-covered",
+          "passed": true,
+          "evidence": "expired/corrupt/out-of-stock keywords in 4 test files"
+        },
+        {
+          "text": "scope-respected",
+          "passed": true,
+          "evidence": "git diff outside src/cart+tests/cart is empty"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 226.05,
+        "stddev": 172.0632,
+        "min": 83.0,
+        "max": 465.1
+      },
+      "tokens": {
+        "mean": 42310.0,
+        "stddev": 21855.4199,
+        "min": 17866,
+        "max": 67665
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 127.175,
+        "stddev": 140.1363,
+        "min": 35.7,
+        "max": 335.2
+      },
+      "tokens": {
+        "mean": 22367.75,
+        "stddev": 14442.1457,
+        "min": 13322,
+        "max": 43901
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.00",
+      "time_seconds": "+98.9",
+      "tokens": "+19942"
+    }
+  },
+  "notes": []
+}
