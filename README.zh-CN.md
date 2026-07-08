@@ -85,6 +85,21 @@ mkdir -p .claude/agents
 cp ~/.claude/skills/fable-token-saver/assets/agents/*.md .claude/agents/
 ```
 
+### 可选:外部模型 worker(GLM / Kimi)
+
+干活的模型不一定来自你的 Anthropic 账号。一条命令安装 CLI 包装器,让 Claude Code 跑在 GLM(智谱)或 Kimi 的 Anthropic 兼容端点上:
+
+```bash
+bash scripts/setup-model-providers.sh                                  # 交互式:提示输入 key,或自动迁移
+KIMI_AUTH_TOKEN=sk-... GLM_AUTH_TOKEN=... bash scripts/setup-model-providers.sh   # 非交互式
+```
+
+API key 存到 `~/.claude/fable-token-saver/providers.env`(chmod 600,永不进 repo 或 shell rc),`~/.zshrc` 里旧式的 `claude-kimi()`/`claude-glm()` 函数会被自动迁移;安装 `claude-kimi`、`claude-glm`、`claude-glm-turbo` 及各自的 `-bypass` 变体(`--dangerously-skip-permissions`,headless 派发必需)。脚本幂等,随时可重跑——更新包装器或换 key(新 key 用环境变量传入)都直接重跑即可;只给一个 provider 的 key 就只装那一个。不带后缀的命令给你自己交互用;编排者则用 headless 方式派发任务包。任何主循环模型都能派——lite 档的 Fable、max 档的 Opus/Sonnet 同理:"用kimi开发,你审核",Kimi 写代码,主循环模型审 diff:
+
+```bash
+claude-kimi-bypass -p "<任务包>"
+```
+
 ## 使用
 
 三种启动方式,任何档位通用:

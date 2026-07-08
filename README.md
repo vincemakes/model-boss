@@ -85,6 +85,21 @@ mkdir -p .claude/agents
 cp ~/.claude/skills/fable-token-saver/assets/agents/*.md .claude/agents/
 ```
 
+### Optional: external model workers (GLM / Kimi)
+
+Workers don't have to come from your Anthropic account. One command installs CLI wrappers that run Claude Code against GLM (Zhipu BigModel) or Kimi Anthropic-compatible endpoints:
+
+```bash
+bash scripts/setup-model-providers.sh                                  # interactive: prompts for keys, or auto-migrates
+KIMI_AUTH_TOKEN=sk-... GLM_AUTH_TOKEN=... bash scripts/setup-model-providers.sh   # non-interactive
+```
+
+It stores API keys in `~/.claude/fable-token-saver/providers.env` (chmod 600 — never in a repo or shell rc), auto-migrating any old-style `claude-kimi()`/`claude-glm()` functions found in `~/.zshrc`, and installs `claude-kimi`, `claude-glm`, `claude-glm-turbo` plus `-bypass` variants (`--dangerously-skip-permissions`, required for headless dispatch). Idempotent — re-run it anytime to update wrappers or rotate a key (pass the new key via env var); providing only one provider's key installs just that provider. The plain commands are for your own interactive sessions; the orchestrator dispatches task packets headlessly. Works with any main loop — Fable in lite mode, Opus/Sonnet in max mode: "用kimi开发，你审核" and the main-loop model reviews what Kimi wrote:
+
+```bash
+claude-kimi-bypass -p "<task packet>"
+```
+
 ## Use
 
 Three ways to start it, in any mode:

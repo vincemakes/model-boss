@@ -1,6 +1,6 @@
 ---
 name: fable-token-saver
-description: Tiered model orchestration for Claude Code. The main-loop model (whatever is strongest — Fable, Opus, or future tiers) acts ONLY as orchestrator and reviewer; cheaper subagent models (Sonnet/Haiku) do all implementation via task packets, objective gates (typecheck/tests must pass before any review) and diff-only review — minimizing strongest-tier token/quota burn. Use when the user wants to save tokens/quota on the strongest model or asks you to orchestrate instead of coding yourself — "delegate to a cheaper model", "farm this out to worker agents", "you plan and review, another model writes", "token saver", "分层干活", "省token", "让便宜模型写", "你统筹", "派sonnet干活". Also use proactively for sizable implementation work (roughly 300+ lines or 6+ files — refactors, migrations, greenfield subsystems). Do NOT use for model pricing/choice questions, plain review of an existing diff, debugging a specific error, or small edits below the delegation floor.
+description: Tiered model orchestration for Claude Code. The main-loop model (whatever is strongest — Fable, Opus, or future tiers) acts ONLY as orchestrator and reviewer; cheaper subagent models (Sonnet/Haiku) do all implementation via task packets, objective gates (typecheck/tests must pass before any review) and diff-only review — minimizing strongest-tier token/quota burn. Use when the user wants to save tokens/quota on the strongest model or asks you to orchestrate instead of coding yourself — "delegate to a cheaper model", "farm this out to worker agents", "you plan and review, another model writes", "token saver", "分层干活", "省token", "让便宜模型写", "你统筹", "派sonnet干活". Also covers external-provider CLI workers — dispatching implementation to GLM/Kimi through `claude-glm`/`claude-kimi` wrappers while the main loop reviews, and one-click setup of those wrappers — "用kimi开发你审核", "让glm写代码", "派kimi干活", "接入glm/kimi", "配置模型alias", "use kimi as the worker", "set up claude-glm". Also use proactively for sizable implementation work (roughly 300+ lines or 6+ files — refactors, migrations, greenfield subsystems). Do NOT use for model pricing/choice questions, plain review of an existing diff, debugging a specific error, or small edits below the delegation floor.
 ---
 
 # Fable Token Saver — Tiered Model Orchestration
@@ -58,8 +58,32 @@ Delegate via the Agent/Task tool with an explicit `model` parameter. Use model a
 | **Implementer** | `sonnet` | Any coding task with a written spec: features, refactors, bug fixes with known root cause, tests |
 | **Mechanic** | `haiku` | Mechanical work: renames, batch replacements, config edits, running scripts, formatting |
 | **Scout** | `haiku` (or `sonnet` for gnarly codebases) | Read-only reconnaissance: "how does X work", "which files touch Y", "what's the current schema" |
+| **External Implementer** | `claude-glm-bypass` / `claude-kimi-bypass` (CLI, via Bash) | Same tier as Implementer — use when the user names an external provider or in-account cheap tiers are quota-exhausted |
 
 If the harness's Agent tool has no `model` parameter, fall back to project subagents: tell the user to install the agent definitions from this skill's `assets/agents/` into `.claude/agents/` (each pins its model in frontmatter), then dispatch by agent name.
+
+### External CLI workers (GLM / Kimi)
+
+Implementation can also be farmed out to entirely different providers through Claude Code CLI wrappers — the orchestrator (whatever runs the main loop: Fable in lite mode, Opus/Sonnet in max mode) keeps judgment, an external model burns its own (cheaper) quota typing the code. This is orthogonal to mode: in max mode you still hit the two consultant checkpoints; only the Implementer seat changes. One-time setup installs `claude-kimi`, `claude-glm`, `claude-glm-turbo` and their `-bypass` variants; keys live in `~/.claude/fable-token-saver/providers.env` (chmod 600), never in a repo or shell rc:
+
+```
+bash scripts/setup-model-providers.sh
+```
+
+Use an external worker when the user names one ("用kimi写，你审核", "dispatch this to glm") or when in-account cheap tiers are unavailable. It slots in at the **Implementer** tier: same task packet, same gate, same diff-only review. Dispatch from the repo root via Bash — always the `-bypass` variant, because a headless worker cannot answer permission prompts:
+
+```
+claude-kimi-bypass -p "<task packet verbatim>"
+```
+
+Give the Bash call a generous timeout (10 min) or run it in the background for fan-out. Everything else about the Loop is unchanged, but external workers run in **your working tree** with permissions skipped, which adds four rules:
+
+- **Dispatch only from a clean tree** (commit or stash first), so `git diff` afterward is exactly the worker's output — that diff is what you review.
+- **No overlapping parallel dispatch.** Two workers sharing one tree conflict; serialize, or give each its own `git worktree`.
+- **Scope fences are the only fence.** `--dangerously-skip-permissions` removes the harness guardrail, so ALLOWED FILES / DO NOT matter more — after each return, check `git status` for out-of-scope files.
+- **The result packet arrives on stdout.** Courier only, as usual: the tree's diff is the ground truth.
+
+The non-bypass variants (`claude-kimi`, `claude-glm`) are for the human's own interactive sessions, not for dispatch.
 
 ## The Loop
 
