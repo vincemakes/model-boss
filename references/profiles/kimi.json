@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "mode": "auto",
+  "routes": {
+    "kimi-k3": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": [
+        "reviewer"
+      ],
+      "read_only": true,
+      "model": "kimi-k3",
+      "provider_family": "kimi"
+    },
+    "claude-kimi": {
+      "transport": "external-cli",
+      "band": "balanced",
+      "roles": [
+        "worker"
+      ],
+      "read_only": false,
+      "command": [
+        "claude-kimi-bypass",
+        "-p"
+      ]
+    }
+  },
+  "preferences": {
+    "reviewers": [
+      "kimi-k3"
+    ],
+    "workers": [
+      "claude-kimi"
+    ],
+    "scouts": [],
+    "mechanics": []
+  },
+  "capabilities": {
+    "kimi-k3": {
+      "proves_authority": true,
+      "requires_exact_host_identity": true,
+      "requires_preflight_identity": true,
+      "provider_family": "kimi",
+      "resolved_model_id": "kimi-k3"
+    },
+    "claude-kimi": {
+      "proves_authority": false,
+      "custom_external_worker": true,
+      "identity_is_unpinned": true
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "mode": "auto",
+  "routes": {
+    "review-primary": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": [
+        "reviewer"
+      ],
+      "read_only": true,
+      "model": "review-model-v1",
+      "provider_family": "example-provider"
+    },
+    "worker-external": {
+      "transport": "external-cli",
+      "band": "balanced",
+      "roles": [
+        "worker"
+      ],
+      "read_only": false,
+      "command": [
+        "worker-cli",
+        "--json"
+      ],
+      "timeout_seconds": 600,
+      "retry_policy": {
+        "worker_attempts": 3,
+        "review_revisions": 2
+      },
+      "credential_env": [
+        {
+          "child_name": "PROVIDER_API_KEY",
+          "source_name": "TOKEN_SAVER_PROVIDER_API_KEY"
+        }
+      ]
+    }
+  },
+  "preferences": {
+    "reviewers": [
+      "review-primary"
+    ],
+    "workers": [
+      "worker-external"
+    ],
+    "scouts": [],
+    "mechanics": []
+  }
+}

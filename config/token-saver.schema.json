@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/vincemakes/fable-token-saver/config/token-saver.schema.json",
+  "title": "Token Saver configuration",
+  "description": "Credential-free, model-independent Token Saver route configuration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "mode": {
+      "enum": [
+        "auto",
+        "lite",
+        "max"
+      ]
+    },
+    "routes": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": ".*\\S.*"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/route"
+      }
+    },
+    "preferences": {
+      "$ref": "#/$defs/preferences"
+    }
+  },
+  "$defs": {
+    "routeIdList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": ".*\\S.*"
+      },
+      "uniqueItems": true
+    },
+    "preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reviewers": {
+          "$ref": "#/$defs/routeIdList"
+        },
+        "workers": {
+          "$ref": "#/$defs/routeIdList"
+        },
+        "scouts": {
+          "$ref": "#/$defs/routeIdList"
+        },
+        "mechanics": {
+          "$ref": "#/$defs/routeIdList"
+        }
+      }
+    },
+    "retryPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "worker_attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 3
+        },
+        "review_revisions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 2
+        }
+      }
+    },
+    "environmentName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "credentialBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "child_name",
+        "source_name"
+      ],
+      "properties": {
+        "child_name": {
+          "$ref": "#/$defs/environmentName"
+        },
+        "source_name": {
+          "$ref": "#/$defs/environmentName"
+        }
+      }
+    },
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "prefixItems": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": ".*\\S.*"
+        }
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transport",
+        "band",
+        "roles",
+        "read_only"
+      ],
+      "properties": {
+        "transport": {
+          "enum": [
+            "host-subagent",
+            "external-cli"
+          ]
+        },
+        "band": {
+          "enum": [
+            "authority",
+            "balanced",
+            "fast"
+          ]
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "reviewer",
+              "worker",
+              "scout",
+              "mechanic"
+            ]
+          }
+        },
+        "read_only": {
+          "type": "boolean"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "pattern": ".*\\S.*"
+        },
+        "provider_family": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "pattern": ".*\\S.*"
+        },
+        "command": {
+          "$ref": "#/$defs/command"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 600
+        },
+        "retry_policy": {
+          "$ref": "#/$defs/retryPolicy"
+        },
+        "credential_env": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/credentialBinding"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "transport": {
+                "const": "external-cli"
+              }
+            },
+            "required": [
+              "transport"
+            ]
+          },
+          "then": {
+            "required": [
+              "command"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "command"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "roles": {
+                "contains": {
+                  "const": "reviewer"
+                }
+              }
+            },
+            "required": [
+              "roles"
+            ]
+          },
+          "then": {
+            "properties": {
+              "read_only": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

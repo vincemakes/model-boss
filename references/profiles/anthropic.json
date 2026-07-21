@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "mode": "auto",
+  "routes": {
+    "fable": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": [
+        "reviewer"
+      ],
+      "read_only": true,
+      "model": "fable",
+      "provider_family": "anthropic"
+    },
+    "opus": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": [
+        "reviewer"
+      ],
+      "read_only": true,
+      "model": "opus",
+      "provider_family": "anthropic"
+    },
+    "sonnet": {
+      "transport": "host-subagent",
+      "band": "balanced",
+      "roles": [
+        "worker"
+      ],
+      "read_only": false,
+      "model": "sonnet",
+      "provider_family": "anthropic"
+    },
+    "haiku": {
+      "transport": "host-subagent",
+      "band": "fast",
+      "roles": [
+        "scout",
+        "mechanic"
+      ],
+      "read_only": false,
+      "model": "haiku",
+      "provider_family": "anthropic"
+    }
+  },
+  "preferences": {
+    "reviewers": [
+      "fable",
+      "opus"
+    ],
+    "workers": [
+      "sonnet"
+    ],
+    "scouts": [
+      "haiku"
+    ],
+    "mechanics": [
+      "haiku"
+    ]
+  }
+}
