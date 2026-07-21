@@ -195,7 +195,6 @@ def _reviewer_eligibility(
     elif probe.fingerprint_evidence_source not in {
         FingerprintEvidenceSource.PINNED_ADAPTER,
         FingerprintEvidenceSource.PROVIDER_RESPONSE,
-        FingerprintEvidenceSource.IDENTITY_HANDSHAKE,
     }:
         return False, f"reviewer route {route_id} has invalid external identity evidence"
     if (
