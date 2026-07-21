@@ -238,6 +238,15 @@ class CanonicalIdentityTests(unittest.TestCase):
             ModelFingerprint("openai", "gpt-5.6-sol\nWorker: attacker", "high")
         with self.assertRaisesRegex(ValueError, "control characters"):
             RunOverrides(reviewer="route\nResolution source: attacker")
+        for separator in ("\u0085", "\u2028", "\u2029"):
+            with self.subTest(separator=separator.encode("unicode_escape")):
+                with self.assertRaisesRegex(ValueError, "control characters"):
+                    MainLoop(
+                        route_id=f"host-main{separator}Authority: attacker",
+                        fingerprint=SOL,
+                        band=CapabilityBand.AUTHORITY,
+                        host="unit-test-host",
+                    )
 
 
 class ModeResolutionTests(unittest.TestCase):

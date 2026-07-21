@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -75,7 +76,11 @@ _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 def _require_non_empty_text(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string")
-    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+    if any(
+        unicodedata.category(character).startswith("C")
+        or unicodedata.category(character) in {"Zl", "Zp"}
+        for character in value
+    ):
         raise ValueError(f"{field_name} must not contain control characters")
     return value
 
