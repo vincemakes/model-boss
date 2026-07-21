@@ -34,13 +34,14 @@ SYMLINK = 0o120000
 EXPECTED_SOURCE_HEX = (
     "544f4b454e2d53415645522d45564944454e4345000000000000000001000000"
     "0000000001000000000000002830303030303030303030303030303030303030"
-    "3030303030303030303030303030303030303030300000000000000001000000"
-    "000000000100000000000000010000000000000005612e747874000000000000"
-    "000200000000000081a400000000000081a40000000000000005646966660a00"
-    "0000000000000000000000000000020000000000000000000000000000000300"
-    "0000000000000000000000000000040000000000000000"
+    "3030303030303030303030303030303030303030300000000000000009000000"
+    "00000000010000000000000005612e7478740000000000000001000000000000"
+    "000100000000000000010000000000000005612e747874000000000000000200"
+    "000000000081a400000000000081a40000000000000005646966660a00000000"
+    "0000000000000000000000020000000000000000000000000000000300000000"
+    "0000000000000000000000040000000000000000"
 )
-EXPECTED_SOURCE_SHA256 = "cdd4835bd9536a7105abf96c9c2081d5606f4e29546387a3c506d2ec8304831e"
+EXPECTED_SOURCE_SHA256 = "1b17ae0e7116cca1396e49308023082e4772ee2675f89fc0ca09311bc65795f0"
 
 EXPECTED_APPROVAL_HASHES = (
     "519b622d6d57a6fbb3ab135a35872816405680c0f5475ccfd04aebe11e21ef91",
@@ -107,9 +108,20 @@ def _snapshot(
     untracked: tuple[EvidenceRecord, ...] = (),
     private: tuple[PrivateRecord, ...] = (),
     baseline: bytes = BASELINE,
+    allowed_paths: tuple[bytes, ...] | None = None,
 ) -> SourceSnapshot:
+    if allowed_paths is None:
+        allowed_paths = tuple(
+            sorted(
+                {
+                    record.path
+                    for record in staged + unstaged + untracked
+                }
+            )
+        )
     return SourceSnapshot(
         baseline_oid=baseline,
+        allowed_paths=allowed_paths,
         staged=staged,
         unstaged=unstaged,
         untracked=untracked,
@@ -171,6 +183,21 @@ class GoldenEncodingTests(unittest.TestCase):
             ),
         )
         self.assertEqual(len(set(documents)), len(documents))
+
+    def test_clean_allowlist_paths_are_bound_into_the_source_hash(self) -> None:
+        base = _snapshot(allowed_paths=(b"task.txt",))
+        expanded = _snapshot(allowed_paths=(b"task.txt", b"clean-but-in-scope.txt"))
+        self.assertNotEqual(
+            hashlib.sha256(encode_source_snapshot(base)).digest(),
+            hashlib.sha256(encode_source_snapshot(expanded)).digest(),
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            _snapshot(allowed_paths=(b"same.txt", b"same.txt"))
+        with self.assertRaisesRegex(ValueError, "allowlist"):
+            _snapshot(
+                untracked=(_untracked(path=b"not-authorized.txt"),),
+                allowed_paths=(b"different.txt",),
+            )
 
 
 class RecordCoverageTests(unittest.TestCase):
@@ -268,7 +295,10 @@ class RecordCoverageTests(unittest.TestCase):
         source_sentinel = b"PREEXISTING-SOURCE-BYTES-MUST-NOT-ENTER-DELTA"
         first_source = _snapshot(staged=(_text(diff=source_sentinel),))
         second_source = _snapshot(unstaged=(_text(diff=b"different source"),))
-        delta = WorkerDelta(records=(_untracked(content=b"worker-only"),))
+        delta = WorkerDelta(
+            records=(_untracked(content=b"worker-only"),),
+            projected_snapshot=first_source,
+        )
 
         first_encoding = encode_worker_delta(delta)
         self.assertNotIn(source_sentinel, first_encoding)
@@ -298,6 +328,26 @@ class RecordCoverageTests(unittest.TestCase):
             self.assertNotIn(private.digest, diagnostic)
             self.assertNotIn(str(private.size), diagnostic)
             self.assertNotIn(oct(private.mode), diagnostic)
+
+    def test_canonical_patch_preserves_cross_section_same_path_state(self) -> None:
+        staged_delete = EvidenceRecord(
+            tag=RecordTag.TEXT_DIFF,
+            path=b"cached.txt",
+            status=RecordStatus.DELETED,
+            old_mode=REGULAR,
+            new_mode=0,
+            canonical_diff=b"delete patch\n",
+        )
+        untracked = _untracked(path=b"cached.txt", content=b"replacement")
+        patch = CanonicalPatch(
+            records=(),
+            staged=(staged_delete,),
+            untracked=(untracked,),
+            private_summary=summarize_private_records(()),
+        )
+        encoded = encode_canonical_patch(patch)
+        framed_path = struct.pack(">Q", len(b"cached.txt")) + b"cached.txt"
+        self.assertEqual(encoded.count(framed_path), 2)
 
 
 class ApprovalBindingTests(unittest.TestCase):

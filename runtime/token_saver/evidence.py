@@ -72,6 +72,7 @@ class _SectionTag(IntEnum):
     PATCH = 6
     PRIVATE_SUMMARY = 7
     STATUS_COUNTS = 8
+    ALLOWED_PATHS = 9
 
 
 def _coerce_enum(enum_type: type[IntEnum], value: object, label: str) -> IntEnum:
@@ -332,6 +333,15 @@ def _normalize_private_records(values: object) -> tuple[PrivateRecord, ...]:
     return tuple(sorted(records, key=lambda record: record.path))
 
 
+def _normalize_paths(values: object, label: str) -> tuple[bytes, ...]:
+    if not isinstance(values, (tuple, list)):
+        raise ValueError(f"{label} must be a raw-path sequence")
+    paths = tuple(_require_git_path(value) for value in values)
+    if len(paths) != len(set(paths)):
+        raise ValueError(f"{label} contains a duplicate raw Git path")
+    return tuple(sorted(paths))
+
+
 def _require_baseline_oid(value: object) -> bytes:
     oid = _require_bytes(value, "baseline object ID")
     if len(oid) not in {40, 64} or any(
@@ -346,6 +356,7 @@ class SourceSnapshot:
     """Complete source state, including local-only out-of-scope fingerprints."""
 
     baseline_oid: bytes
+    allowed_paths: tuple[bytes, ...] = ()
     staged: tuple[EvidenceRecord, ...] = ()
     unstaged: tuple[EvidenceRecord, ...] = ()
     untracked: tuple[EvidenceRecord, ...] = ()
@@ -353,6 +364,7 @@ class SourceSnapshot:
 
     def __post_init__(self) -> None:
         baseline = _require_baseline_oid(self.baseline_oid)
+        allowed_paths = _normalize_paths(self.allowed_paths, "source allowlist")
         staged = _normalize_public_records(self.staged, "staged records")
         unstaged = _normalize_public_records(self.unstaged, "unstaged records")
         untracked = _normalize_public_records(self.untracked, "untracked records")
@@ -365,6 +377,12 @@ class SourceSnapshot:
         tracked_paths = {record.path for record in staged + unstaged}
         untracked_paths = {record.path for record in untracked}
         private_paths = {record.path for record in private}
+        public_paths = tracked_paths | untracked_paths
+        allowed_path_set = set(allowed_paths)
+        if not public_paths.issubset(allowed_path_set):
+            raise ValueError("public source path is outside the source allowlist")
+        if private_paths.intersection(allowed_path_set):
+            raise ValueError("private source path overlaps the source allowlist")
         staged_by_path = {record.path: record for record in staged}
         unstaged_paths = {record.path for record in unstaged}
         for path in tracked_paths.intersection(untracked_paths):
@@ -379,6 +397,7 @@ class SourceSnapshot:
             raise ValueError("public and private source paths overlap")
 
         object.__setattr__(self, "baseline_oid", baseline)
+        object.__setattr__(self, "allowed_paths", allowed_paths)
         object.__setattr__(self, "staged", staged)
         object.__setattr__(self, "unstaged", unstaged)
         object.__setattr__(self, "untracked", untracked)
@@ -391,9 +410,14 @@ class SourceSnapshot:
 
 @dataclass(frozen=True)
 class WorkerDelta:
-    """Worker-created changes only; no source-snapshot bytes are representable here."""
+    """Worker-only records plus a non-hashed projected destination snapshot."""
 
     records: tuple[EvidenceRecord, ...]
+    projected_snapshot: SourceSnapshot | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -401,6 +425,21 @@ class WorkerDelta:
             "records",
             _normalize_public_records(self.records, "worker records"),
         )
+        if self.projected_snapshot is not None:
+            if not isinstance(self.projected_snapshot, SourceSnapshot):
+                raise ValueError("projected snapshot must be SourceSnapshot")
+            object.__setattr__(
+                self,
+                "projected_snapshot",
+                SourceSnapshot(
+                    baseline_oid=self.projected_snapshot.baseline_oid,
+                    allowed_paths=self.projected_snapshot.allowed_paths,
+                    staged=self.projected_snapshot.staged,
+                    unstaged=self.projected_snapshot.unstaged,
+                    untracked=self.projected_snapshot.untracked,
+                    private=self.projected_snapshot.private,
+                ),
+            )
 
 
 @dataclass(frozen=True)
@@ -438,9 +477,25 @@ class CanonicalPatch:
 
     records: tuple[EvidenceRecord, ...]
     private_summary: PrivateSummary
+    staged: tuple[EvidenceRecord, ...] = ()
+    unstaged: tuple[EvidenceRecord, ...] = ()
+    untracked: tuple[EvidenceRecord, ...] = ()
 
     def __post_init__(self) -> None:
         records = _normalize_public_records(self.records, "canonical patch records")
+        staged = _normalize_public_records(self.staged, "canonical staged records")
+        unstaged = _normalize_public_records(
+            self.unstaged,
+            "canonical unstaged records",
+        )
+        untracked = _normalize_public_records(
+            self.untracked,
+            "canonical untracked records",
+        )
+        if any(record.status is RecordStatus.UNTRACKED for record in staged + unstaged):
+            raise ValueError("canonical tracked sections contain an untracked record")
+        if any(record.status is not RecordStatus.UNTRACKED for record in untracked):
+            raise ValueError("canonical untracked section contains a tracked record")
         if not isinstance(self.private_summary, PrivateSummary):
             raise ValueError("canonical patch requires a private summary")
         summary = PrivateSummary(
@@ -448,6 +503,9 @@ class CanonicalPatch:
             status_counts=self.private_summary.status_counts,
         )
         object.__setattr__(self, "records", records)
+        object.__setattr__(self, "staged", staged)
+        object.__setattr__(self, "unstaged", unstaged)
+        object.__setattr__(self, "untracked", untracked)
         object.__setattr__(self, "private_summary", summary)
 
 
@@ -563,6 +621,7 @@ def encode_source_snapshot(snapshot: SourceSnapshot) -> bytes:
         raise ValueError("snapshot must be SourceSnapshot")
     snapshot = SourceSnapshot(
         baseline_oid=snapshot.baseline_oid,
+        allowed_paths=snapshot.allowed_paths,
         staged=snapshot.staged,
         unstaged=snapshot.unstaged,
         untracked=snapshot.untracked,
@@ -572,6 +631,12 @@ def encode_source_snapshot(snapshot: SourceSnapshot) -> bytes:
         (
             _header(_DocumentTag.SOURCE_SNAPSHOT),
             _byte_field(snapshot.baseline_oid, "baseline object ID"),
+            _u64(int(_SectionTag.ALLOWED_PATHS), "section tag"),
+            _u64(len(snapshot.allowed_paths), "allowed path count"),
+            *(
+                _byte_field(path, "allowed raw Git path")
+                for path in snapshot.allowed_paths
+            ),
             _encode_public_section(_SectionTag.STAGED, snapshot.staged),
             _encode_public_section(_SectionTag.UNSTAGED, snapshot.unstaged),
             _encode_public_section(_SectionTag.UNTRACKED, snapshot.untracked),
@@ -601,6 +666,9 @@ def encode_canonical_patch(patch: CanonicalPatch) -> bytes:
     patch = CanonicalPatch(
         records=patch.records,
         private_summary=patch.private_summary,
+        staged=patch.staged,
+        unstaged=patch.unstaged,
+        untracked=patch.untracked,
     )
     summary = patch.private_summary
     status_chunks: list[bytes] = []
@@ -614,6 +682,9 @@ def encode_canonical_patch(patch: CanonicalPatch) -> bytes:
     return b"".join(
         (
             _header(_DocumentTag.CANONICAL_PATCH),
+            _encode_public_section(_SectionTag.STAGED, patch.staged),
+            _encode_public_section(_SectionTag.UNSTAGED, patch.unstaged),
+            _encode_public_section(_SectionTag.UNTRACKED, patch.untracked),
             _encode_public_section(_SectionTag.PATCH, patch.records),
             _u64(int(_SectionTag.PRIVATE_SUMMARY), "section tag"),
             _byte_field(bytes.fromhex(summary.aggregate_hash), "private aggregate"),
