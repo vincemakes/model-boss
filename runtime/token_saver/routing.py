@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from .models import (
     CandidateTopology,
     CapabilityBand,
+    FingerprintEvidenceSource,
     LoadedConfig,
     MainLoop,
     Mode,
@@ -174,6 +175,15 @@ def _reviewer_eligibility(
     fingerprint = probe.resolved_fingerprint
     if fingerprint is None or probe.fingerprint_evidence_source is None:
         return False, f"reviewer route {route_id} has no canonical identity evidence"
+    if route.transport is Transport.HOST_SUBAGENT:
+        if probe.fingerprint_evidence_source is not FingerprintEvidenceSource.HOST_METADATA:
+            return False, f"reviewer route {route_id} lacks exact host identity metadata"
+    elif probe.fingerprint_evidence_source not in {
+        FingerprintEvidenceSource.PINNED_ADAPTER,
+        FingerprintEvidenceSource.PROVIDER_RESPONSE,
+        FingerprintEvidenceSource.IDENTITY_HANDSHAKE,
+    }:
+        return False, f"reviewer route {route_id} has invalid external identity evidence"
     if route.provider_family is None or route.model is None:
         return False, f"reviewer route {route_id} is not pinned to a canonical model"
     if not _route_pin_matches(route, fingerprint):
@@ -200,11 +210,10 @@ def _worker_eligibility(
         return False, f"worker route {route_id} has no preflight evidence"
     if not _transport_is_available(route, probe):
         return False, f"worker route {route_id} is unavailable"
-    if (
-        route.transport is Transport.EXTERNAL_CLI
-        and probe.verified_worker_sandbox_identity is None
-    ):
-        return False, f"worker route {route_id} has no verified sandbox identity"
+    if route.transport is Transport.EXTERNAL_CLI:
+        sandbox_identity = probe.verified_worker_sandbox_identity
+        if sandbox_identity is None or not sandbox_identity.is_bound_to(route):
+            return False, f"worker route {route_id} has no exact sandbox identity"
     return True, None
 
 
@@ -317,7 +326,7 @@ def preflight_candidates(
             facts=tuple(reviewer_facts + worker_facts),
         )
 
-    if len(eligible_reviewers) > 1 and candidate.reviewer_source.source != "explicit":
+    if len(eligible_reviewers) > 1:
         return PreflightReport(
             candidate=candidate,
             status=Status.NEEDS_CONTEXT,

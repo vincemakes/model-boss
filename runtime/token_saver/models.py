@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -39,6 +40,13 @@ class Transport(_StringEnum):
     EXTERNAL_CLI = "external-cli"
 
 
+class FingerprintEvidenceSource(_StringEnum):
+    HOST_METADATA = "host-metadata"
+    PINNED_ADAPTER = "pinned-adapter"
+    PROVIDER_RESPONSE = "provider-response"
+    IDENTITY_HANDSHAKE = "identity-handshake"
+
+
 class Status(_StringEnum):
     OK = "ok"
     NEEDS_CONTEXT = "needs_context"
@@ -61,11 +69,14 @@ RunStatus = Status
 
 
 _ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _require_non_empty_text(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError(f"{field_name} must not contain control characters")
     return value
 
 
@@ -202,6 +213,116 @@ class Route:
         object.__setattr__(self, "credential_env", credential_env)
 
 
+def _sandbox_binding_hash(
+    *,
+    route_id: str,
+    transport: Transport,
+    command: tuple[str, ...],
+    worktree_identity: str,
+    route_state_identity: str,
+    profile_hash: str,
+) -> str:
+    fields = (
+        route_id.encode("utf-8"),
+        transport.value.encode("ascii"),
+        len(command).to_bytes(8, "big"),
+        *(member.encode("utf-8") for member in command),
+        worktree_identity.encode("ascii"),
+        route_state_identity.encode("ascii"),
+        profile_hash.encode("ascii"),
+    )
+    encoded = bytearray(b"TOKEN-SAVER-SANDBOX-BINDING\0")
+    for field in fields:
+        encoded.extend(len(field).to_bytes(8, "big"))
+        encoded.extend(field)
+    return hashlib.sha256(encoded).hexdigest()
+
+
+@dataclass(frozen=True)
+class WorkerSandboxIdentity:
+    """Proof token bound to one external route and one verified sandbox context."""
+
+    route_id: str
+    transport: Transport
+    command: tuple[str, ...]
+    worktree_identity: str
+    route_state_identity: str
+    profile_hash: str
+    binding_hash: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty_text(self.route_id, "route_id")
+        try:
+            transport = Transport(self.transport)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("transport must be a supported transport") from exc
+        if transport is not Transport.EXTERNAL_CLI:
+            raise ValueError("worker sandbox identity requires external-cli transport")
+        if not isinstance(self.command, (tuple, list)) or not self.command or not all(
+            isinstance(member, str) for member in self.command
+        ):
+            raise ValueError("command must be a non-empty argument tuple")
+        command = tuple(self.command)
+        for field_name in (
+            "worktree_identity",
+            "route_state_identity",
+            "profile_hash",
+            "binding_hash",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or _SHA256_HEX.fullmatch(value) is None:
+                raise ValueError(f"{field_name} must be a lowercase SHA-256")
+        expected = _sandbox_binding_hash(
+            route_id=self.route_id,
+            transport=transport,
+            command=command,
+            worktree_identity=self.worktree_identity,
+            route_state_identity=self.route_state_identity,
+            profile_hash=self.profile_hash,
+        )
+        if self.binding_hash != expected:
+            raise ValueError("binding_hash does not match the exact sandbox context")
+        object.__setattr__(self, "transport", transport)
+        object.__setattr__(self, "command", command)
+
+    @classmethod
+    def issue(
+        cls,
+        *,
+        route: Route,
+        worktree_identity: str,
+        route_state_identity: str,
+        profile_hash: str,
+    ) -> WorkerSandboxIdentity:
+        if not isinstance(route, Route):
+            raise ValueError("route must be a Route")
+        binding_hash = _sandbox_binding_hash(
+            route_id=route.route_id,
+            transport=route.transport,
+            command=route.command,
+            worktree_identity=worktree_identity,
+            route_state_identity=route_state_identity,
+            profile_hash=profile_hash,
+        )
+        return cls(
+            route_id=route.route_id,
+            transport=route.transport,
+            command=route.command,
+            worktree_identity=worktree_identity,
+            route_state_identity=route_state_identity,
+            profile_hash=profile_hash,
+            binding_hash=binding_hash,
+        )
+
+    def is_bound_to(self, route: Route) -> bool:
+        return (
+            isinstance(route, Route)
+            and self.route_id == route.route_id
+            and self.transport is route.transport
+            and self.command == route.command
+        )
+
+
 @dataclass(frozen=True)
 class Preferences:
     reviewers: tuple[str, ...] = ()
@@ -325,11 +446,11 @@ class RouteProbeResult:
     route_id: str
     reachable: bool
     resolved_fingerprint: ModelFingerprint | None
-    fingerprint_evidence_source: str | None
+    fingerprint_evidence_source: FingerprintEvidenceSource | None
     executable_available: bool
     native_agent_available: bool
     reviewer_read_only_enforced: bool
-    verified_worker_sandbox_identity: str | None
+    verified_worker_sandbox_identity: WorkerSandboxIdentity | None
     configured_credentials: tuple[str, ...] = ()
     missing_credentials: tuple[str, ...] = ()
 
@@ -348,9 +469,16 @@ class RouteProbeResult:
         ):
             raise ValueError("resolved_fingerprint must be a ModelFingerprint or null")
         if self.fingerprint_evidence_source is not None:
-            _require_non_empty_text(
-                self.fingerprint_evidence_source,
+            try:
+                evidence_source = FingerprintEvidenceSource(
+                    self.fingerprint_evidence_source
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("fingerprint evidence source is unsupported") from exc
+            object.__setattr__(
+                self,
                 "fingerprint_evidence_source",
+                evidence_source,
             )
         if (
             self.resolved_fingerprint is None
@@ -362,10 +490,12 @@ class RouteProbeResult:
             and self.fingerprint_evidence_source is None
         ):
             raise ValueError("resolved fingerprint requires an evidence source")
-        if self.verified_worker_sandbox_identity is not None:
-            _require_non_empty_text(
-                self.verified_worker_sandbox_identity,
-                "verified_worker_sandbox_identity",
+        if self.verified_worker_sandbox_identity is not None and not isinstance(
+            self.verified_worker_sandbox_identity,
+            WorkerSandboxIdentity,
+        ):
+            raise ValueError(
+                "verified_worker_sandbox_identity must be exact sandbox proof"
             )
 
         for field_name in ("configured_credentials", "missing_credentials"):
@@ -551,8 +681,7 @@ class Resolution:
             raise ValueError("blocked resolution cannot expose a successful mode")
         if self.authority_route_id is not None:
             _require_non_empty_text(self.authority_route_id, "authority_route_id")
-        if not isinstance(self.worker, str) or not self.worker.strip():
-            raise ValueError("worker must be a route ID, main loop, or none")
+        _require_non_empty_text(self.worker, "worker")
         if status is Status.OK and self.mode is Mode.LITE and self.authority_route_id:
             raise ValueError("Lite authority must remain inline")
         if status is Status.OK and self.mode is Mode.MAX and not self.authority_route_id:
@@ -588,4 +717,6 @@ def _normalize_facts(values: object) -> tuple[str, ...]:
         isinstance(value, str) and value.strip() for value in values
     ):
         raise ValueError("facts must contain non-empty strings")
+    for value in values:
+        _require_non_empty_text(value, "fact")
     return tuple(values)
