@@ -85,7 +85,7 @@ _JWT_VALUE = re.compile(
 _AWS_ACCESS_KEY = re.compile(r"^(?:AKIA|ASIA)[A-Z0-9]{16}$")
 _GOOGLE_API_KEY = re.compile(r"^AIza[A-Za-z0-9_-]{20,}$")
 _URL_USERINFO = re.compile(
-    r"^[A-Za-z][A-Za-z0-9+.-]*://[^/?#@\s:]+:[^/?#@\s]+@"
+    r"^[A-Za-z][A-Za-z0-9+.-]*://[^/?#@\s]+@"
 )
 _SENSITIVE_VALUE_OPTIONS = {"--key", "--api-key", "--token", "--password"}
 _USERINFO_OPTIONS = {"--user", "-u"}
@@ -381,13 +381,11 @@ def _validate_command_structure(command: list[str], path: str) -> None:
             if candidate is None and index + 1 < len(command):
                 candidate = command[index + 1]
                 candidate_index = index + 1
-            if candidate is not None:
-                username, colon, password = candidate.partition(":")
-                if colon and username and password:
-                    raise ConfigError(
-                        f"{path}[{candidate_index}]",
-                        "credential-bearing command options are not allowed",
-                    )
+            if candidate is not None and ":" in candidate:
+                raise ConfigError(
+                    f"{path}[{candidate_index}]",
+                    "credential-bearing command options are not allowed",
+                )
 
 
 def _parse_route(route_id: str, value: object) -> Route:

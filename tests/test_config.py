@@ -408,6 +408,51 @@ class ConfigValidationTests(unittest.TestCase):
                 )
                 self.assertIn("credential", str(error).lower())
 
+    def test_external_command_rejects_every_colon_bearing_user_value(self) -> None:
+        opaque_username = "qzv471"
+        opaque_password = "mnb842"
+        values = (
+            ("leading-colon", f":{opaque_password}"),
+            ("trailing-colon", f"{opaque_username}:"),
+            ("both-sides", f"{opaque_username}:{opaque_password}"),
+        )
+        for option in ("--user", "-u"):
+            for value_shape, value in values:
+                profile = _base_profile()
+                profile["routes"]["worker"] = {
+                    "transport": "external-cli",
+                    "band": "balanced",
+                    "roles": ["worker"],
+                    "read_only": False,
+                    "command": ["worker-bin", option, value],
+                }
+                with self.subTest(option=option, value_shape=value_shape):
+                    error = self.assert_config_error_redacts(
+                        lambda profile=profile: load_config_layers(profile=profile),
+                        opaque_username,
+                        opaque_password,
+                        value,
+                    )
+                    self.assertIn("credential", str(error).lower())
+
+    def test_external_command_rejects_opaque_url_authority_userinfo(self) -> None:
+        opaque_userinfo = "qzv471mnb842"
+        credential_url = f"https://{opaque_userinfo}@example.test/"
+        profile = _base_profile()
+        profile["routes"]["worker"] = {
+            "transport": "external-cli",
+            "band": "balanced",
+            "roles": ["worker"],
+            "read_only": False,
+            "command": ["worker-bin", credential_url],
+        }
+        error = self.assert_config_error_redacts(
+            lambda: load_config_layers(profile=profile),
+            opaque_userinfo,
+            credential_url,
+        )
+        self.assertIn("credential", str(error).lower())
+
     def test_credential_detection_does_not_reject_benign_similar_words(self) -> None:
         profile = _base_profile()
         profile["routes"]["worker"] = {
@@ -431,6 +476,8 @@ class ConfigValidationTests(unittest.TestCase):
                 "-u",
                 "alice",
                 "https://example.test/path",
+                "https://example.test/path/@opaque-user",
+                "https://example.test/search?q=opaque-user@example.test",
             ],
         }
         loaded = load_config_layers(profile=profile)
