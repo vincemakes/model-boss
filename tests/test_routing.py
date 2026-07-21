@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import fields
+from dataclasses import fields, replace
 
 from runtime.token_saver.models import (
     CapabilityBand,
@@ -905,6 +905,22 @@ class PreferenceAndWorkerTests(unittest.TestCase):
                 authority_route_id=same_reviewer.route_id,
                 worker="main loop",
             )
+
+        valid_report = preflight_candidates(
+            candidate,
+            {reviewer.route_id: _probe(reviewer, SOL)},
+        )
+        with self.assertRaisesRegex(ValueError, "preflight_candidates"):
+            replace(
+                valid_report,
+                candidate=same_candidate,
+                selected_reviewer_route_id=same_reviewer.route_id,
+                eligible_reviewer_route_ids=(same_reviewer.route_id,),
+                ineligible_reviewer_route_ids=(),
+            )
+        valid_resolution = finalize_resolution(candidate, valid_report)
+        with self.assertRaisesRegex(ValueError, "finalize_resolution"):
+            replace(valid_resolution)
 
     def test_probe_mapping_key_must_match_embedded_route_id(self) -> None:
         reviewer = _route(

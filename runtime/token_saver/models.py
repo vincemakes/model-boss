@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
@@ -618,9 +618,9 @@ class PreflightReport:
     eligible_worker_route_ids: tuple[str, ...] = ()
     ineligible_worker_route_ids: tuple[str, ...] = ()
     facts: tuple[str, ...] = ()
-    _issuer: object | None = field(default=None, repr=False, compare=False)
+    _issuer: InitVar[object | None] = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, _issuer: object | None) -> None:
         if not isinstance(self.candidate, CandidateTopology):
             raise ValueError("candidate must be CandidateTopology")
         try:
@@ -744,7 +744,7 @@ class PreflightReport:
             if len(self.eligible_reviewer_route_ids) != 1:
                 raise ValueError("successful Max requires one unambiguous reviewer")
         object.__setattr__(self, "facts", _normalize_facts(self.facts))
-        if self._issuer is not _PREFLIGHT_ISSUER:
+        if _issuer is not _PREFLIGHT_ISSUER:
             raise ValueError("PreflightReport must be produced by preflight_candidates")
 
 
@@ -763,9 +763,9 @@ class Resolution:
         repr=False,
         compare=False,
     )
-    _issuer: object | None = field(default=None, repr=False, compare=False)
+    _issuer: InitVar[object | None] = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, _issuer: object | None) -> None:
         try:
             status = Status(self.status)
         except (TypeError, ValueError) as exc:
@@ -838,7 +838,7 @@ class Resolution:
         if status is Status.OK and self.mode is Mode.LITE and self.worker == "main loop":
             raise ValueError("Lite worker must be a configured route or none")
         object.__setattr__(self, "facts", _normalize_facts(self.facts))
-        if self._issuer is not _RESOLUTION_ISSUER:
+        if _issuer is not _RESOLUTION_ISSUER:
             raise ValueError("Resolution must be produced by finalize_resolution")
         report = self.preflight_report
         if not isinstance(report, PreflightReport):
