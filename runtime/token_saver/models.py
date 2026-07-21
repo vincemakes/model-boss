@@ -316,3 +316,276 @@ class LoadedConfig:
             raise ValueError("route provenance must cover every route")
         object.__setattr__(self, "routes", MappingProxyType(routes))
         object.__setattr__(self, "route_provenance", MappingProxyType(provenance))
+
+
+@dataclass(frozen=True)
+class RouteProbeResult:
+    """Credential-free evidence produced by a later transport preflight."""
+
+    route_id: str
+    reachable: bool
+    resolved_fingerprint: ModelFingerprint | None
+    fingerprint_evidence_source: str | None
+    executable_available: bool
+    native_agent_available: bool
+    reviewer_read_only_enforced: bool
+    verified_worker_sandbox_identity: str | None
+    configured_credentials: tuple[str, ...] = ()
+    missing_credentials: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_non_empty_text(self.route_id, "route_id")
+        for field_name in (
+            "reachable",
+            "executable_available",
+            "native_agent_available",
+            "reviewer_read_only_enforced",
+        ):
+            if not isinstance(getattr(self, field_name), bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        if self.resolved_fingerprint is not None and not isinstance(
+            self.resolved_fingerprint, ModelFingerprint
+        ):
+            raise ValueError("resolved_fingerprint must be a ModelFingerprint or null")
+        if self.fingerprint_evidence_source is not None:
+            _require_non_empty_text(
+                self.fingerprint_evidence_source,
+                "fingerprint_evidence_source",
+            )
+        if (
+            self.resolved_fingerprint is None
+            and self.fingerprint_evidence_source is not None
+        ):
+            raise ValueError("fingerprint evidence requires a resolved fingerprint")
+        if (
+            self.resolved_fingerprint is not None
+            and self.fingerprint_evidence_source is None
+        ):
+            raise ValueError("resolved fingerprint requires an evidence source")
+        if self.verified_worker_sandbox_identity is not None:
+            _require_non_empty_text(
+                self.verified_worker_sandbox_identity,
+                "verified_worker_sandbox_identity",
+            )
+
+        for field_name in ("configured_credentials", "missing_credentials"):
+            names = getattr(self, field_name)
+            if not isinstance(names, (tuple, list)) or not all(
+                isinstance(name, str) and _ENV_NAME.fullmatch(name) is not None
+                for name in names
+            ):
+                raise ValueError(f"{field_name} must contain environment variable names")
+            normalized = tuple(names)
+            if len(set(normalized)) != len(normalized):
+                raise ValueError(f"{field_name} must not contain duplicates")
+            object.__setattr__(self, field_name, normalized)
+        if set(self.missing_credentials).intersection(self.configured_credentials):
+            raise ValueError("credential names cannot be both configured and missing")
+
+
+@dataclass(frozen=True)
+class CandidateTopology:
+    """Pure route preferences before any availability claims are considered."""
+
+    main: MainLoop | None
+    requested_mode: Mode
+    routes: Mapping[str, Route]
+    reviewer_route_ids: tuple[str, ...]
+    worker_route_ids: tuple[str, ...]
+    mode_source: Provenance
+    reviewer_source: Provenance
+    worker_source: Provenance
+    resolution_source: str
+    status: Status = Status.OK
+    facts: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.main is not None and not isinstance(self.main, MainLoop):
+            raise ValueError("main must be a MainLoop or null")
+        try:
+            object.__setattr__(self, "requested_mode", Mode(self.requested_mode))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("requested_mode must be auto, lite, or max") from exc
+        routes = dict(self.routes)
+        if not all(
+            isinstance(route_id, str)
+            and isinstance(route, Route)
+            and route_id == route.route_id
+            for route_id, route in routes.items()
+        ):
+            raise ValueError("routes must map matching identifiers to Route values")
+        object.__setattr__(self, "routes", MappingProxyType(routes))
+        for field_name in ("reviewer_route_ids", "worker_route_ids"):
+            route_ids = getattr(self, field_name)
+            if not isinstance(route_ids, (tuple, list)) or not all(
+                isinstance(route_id, str) and route_id.strip() for route_id in route_ids
+            ):
+                raise ValueError(f"{field_name} must contain route identifiers")
+            normalized = tuple(route_ids)
+            if len(set(normalized)) != len(normalized):
+                raise ValueError(f"{field_name} must not contain duplicates")
+            object.__setattr__(self, field_name, normalized)
+        for field_name in ("mode_source", "reviewer_source", "worker_source"):
+            if not isinstance(getattr(self, field_name), Provenance):
+                raise ValueError(f"{field_name} must be Provenance")
+        if self.resolution_source not in {"profile", "user", "project", "explicit"}:
+            raise ValueError("resolution_source must be a supported source")
+        try:
+            status = Status(self.status)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("status must be a structured status") from exc
+        if status not in {Status.OK, Status.NEEDS_CONTEXT}:
+            raise ValueError("candidate status must be ok or needs_context")
+        object.__setattr__(self, "status", status)
+        object.__setattr__(self, "facts", _normalize_facts(self.facts))
+
+
+@dataclass(frozen=True)
+class PreflightReport:
+    """Eligibility results derived only from injected probe evidence."""
+
+    candidate: CandidateTopology
+    status: Status
+    resolved_mode: Mode | None
+    selected_reviewer_route_id: str | None = None
+    selected_worker_route_id: str | None = None
+    eligible_reviewer_route_ids: tuple[str, ...] = ()
+    ineligible_reviewer_route_ids: tuple[str, ...] = ()
+    eligible_worker_route_ids: tuple[str, ...] = ()
+    ineligible_worker_route_ids: tuple[str, ...] = ()
+    facts: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate, CandidateTopology):
+            raise ValueError("candidate must be CandidateTopology")
+        try:
+            status = Status(self.status)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("status must be a structured status") from exc
+        object.__setattr__(self, "status", status)
+        if self.resolved_mode is not None:
+            try:
+                mode = Mode(self.resolved_mode)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("resolved_mode must be lite, max, or null") from exc
+            if mode is Mode.AUTO:
+                raise ValueError("resolved_mode cannot remain auto")
+            object.__setattr__(self, "resolved_mode", mode)
+        if status is Status.OK and self.resolved_mode is None:
+            raise ValueError("successful preflight requires a resolved mode")
+        if status is not Status.OK and self.resolved_mode is not None:
+            raise ValueError("blocked preflight cannot expose a resolved mode")
+        for field_name in (
+            "selected_reviewer_route_id",
+            "selected_worker_route_id",
+        ):
+            value = getattr(self, field_name)
+            if value is not None:
+                _require_non_empty_text(value, field_name)
+        for field_name in (
+            "eligible_reviewer_route_ids",
+            "ineligible_reviewer_route_ids",
+            "eligible_worker_route_ids",
+            "ineligible_worker_route_ids",
+        ):
+            values = getattr(self, field_name)
+            if not isinstance(values, (tuple, list)) or not all(
+                isinstance(value, str) and value.strip() for value in values
+            ):
+                raise ValueError(f"{field_name} must contain route identifiers")
+            object.__setattr__(self, field_name, tuple(values))
+        if (
+            self.selected_reviewer_route_id is not None
+            and self.selected_reviewer_route_id
+            not in self.eligible_reviewer_route_ids
+        ):
+            raise ValueError("selected reviewer must be eligible")
+        if (
+            self.selected_worker_route_id is not None
+            and self.selected_worker_route_id not in self.eligible_worker_route_ids
+        ):
+            raise ValueError("selected worker must be eligible")
+        if status is not Status.OK and (
+            self.selected_reviewer_route_id is not None
+            or self.selected_worker_route_id is not None
+        ):
+            raise ValueError("blocked preflight cannot select routes")
+        if self.resolved_mode is Mode.LITE and self.selected_reviewer_route_id is not None:
+            raise ValueError("Lite preflight cannot select an external authority")
+        if self.resolved_mode is Mode.MAX and self.selected_reviewer_route_id is None:
+            raise ValueError("Max preflight requires a selected reviewer")
+        object.__setattr__(self, "facts", _normalize_facts(self.facts))
+
+
+@dataclass(frozen=True)
+class Resolution:
+    """Final authority topology, or a fail-closed structured status."""
+
+    status: Status
+    main: MainLoop | None
+    mode: Mode | None
+    authority_route_id: str | None
+    worker: str
+    resolution_source: str
+    facts: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        try:
+            status = Status(self.status)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("status must be a structured status") from exc
+        object.__setattr__(self, "status", status)
+        if self.main is not None and not isinstance(self.main, MainLoop):
+            raise ValueError("main must be a MainLoop or null")
+        if self.mode is not None:
+            try:
+                mode = Mode(self.mode)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("mode must be lite, max, or null") from exc
+            if mode is Mode.AUTO:
+                raise ValueError("mode cannot remain auto")
+            object.__setattr__(self, "mode", mode)
+        if status is Status.OK and (self.main is None or self.mode is None):
+            raise ValueError("successful resolution requires a main loop and mode")
+        if status is not Status.OK and self.mode is not None:
+            raise ValueError("blocked resolution cannot expose a successful mode")
+        if self.authority_route_id is not None:
+            _require_non_empty_text(self.authority_route_id, "authority_route_id")
+        if not isinstance(self.worker, str) or not self.worker.strip():
+            raise ValueError("worker must be a route ID, main loop, or none")
+        if status is Status.OK and self.mode is Mode.LITE and self.authority_route_id:
+            raise ValueError("Lite authority must remain inline")
+        if status is Status.OK and self.mode is Mode.MAX and not self.authority_route_id:
+            raise ValueError("Max authority requires a reviewer route")
+        if status is not Status.OK and (
+            self.authority_route_id is not None or self.worker != "none"
+        ):
+            raise ValueError("blocked resolution cannot expose a runnable topology")
+        if self.resolution_source not in {"profile", "user", "project", "explicit"}:
+            raise ValueError("resolution_source must be a supported source")
+        object.__setattr__(self, "facts", _normalize_facts(self.facts))
+
+    def startup_verdict(self) -> str:
+        """Serialize the five-line startup verdict only for valid topologies."""
+
+        if self.status is not Status.OK or self.main is None or self.mode is None:
+            raise ValueError("blocked resolutions do not have a startup verdict")
+        authority = self.authority_route_id or "inline main loop"
+        return "\n".join(
+            (
+                "Main loop: "
+                f"{self.main.route_id}/{self.main.fingerprint.resolved_model_id}",
+                f"Resolved mode: {self.mode.value.title()}",
+                f"Authority: {authority}",
+                f"Worker: {self.worker}",
+                f"Resolution source: {self.resolution_source}",
+            )
+        )
+
+
+def _normalize_facts(values: object) -> tuple[str, ...]:
+    if not isinstance(values, (tuple, list)) or not all(
+        isinstance(value, str) and value.strip() for value in values
+    ):
+        raise ValueError("facts must contain non-empty strings")
+    return tuple(values)
