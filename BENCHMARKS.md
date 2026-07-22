@@ -4,23 +4,24 @@
 
 > Historical reference-stack notice: these runs measure the 2026 Claude/Fable/Opus stack. They do not predict savings for Sol, Kimi, or future model profiles. `-42%` and `-89%` are recorded strongest-model output-token changes; `-34%` and `-88%` are price-weighted strongest-model quota changes used only as a quota proxy. The blind bug-hunt is one observed probe, not general proof of capability parity.
 
-> Evidence-path provenance: captured absolute workspace prefixes in `benchmarks/benchmark.json` were normalized to `<historical-workspace>` for publication. Task names, gate output, measurements, and all remaining evidence are unchanged; the placeholder does not claim that these runs occurred under a Model Boss directory.
+> Publication provenance: the predecessor identity was normalized to neutral labels, and its captured absolute workspace prefix was normalized to `<historical-workspace>`. Recorded tasks, gate output, outcomes, and token/cost/time measurements were not changed; the placeholder does not claim that these runs occurred under a Model Boss directory.
 
-These are the historical reference measurements behind Model Boss. All numbers come from real headless `claude -p` runs, measured via the CLI's per-model usage JSON — no estimation. Every run passed both gates (`tsc --noEmit` + `vitest`) and all quality assertions; **output quality was identical across conditions**. The differences are cost, quota, and time.
+These are predecessor measurements inherited by Model Boss; Model Boss did not run this corpus. All numbers come from real headless `claude -p` runs of that predecessor, measured via the CLI's per-model usage JSON — no estimation. Every run passed both gates (`tsc --noEmit` + `vitest`) and all quality assertions; **output quality was identical across conditions**. The differences are cost, quota, and time.
 
 ## Methodology
 
-- Each condition runs as an independent headless `claude -p` session in a fresh copy of the same fixture repo (real `pnpm` project, git-initialized).
-- With-Model-Boss prompts invoke Model Boss; baseline prompts forbid orchestration skills. Same task text otherwise.
+- Each task/configuration pair in the inherited four-eval corpus ran once as an independent headless `claude -p` session in a fresh copy of the same fixture repo (real `pnpm` project, git-initialized).
+- The summary's ± values report sample dispersion across four distinct tasks, not repeated-trial variance or statistical confidence.
+- Predecessor-skill prompts invoke the measured predecessor; baseline prompts forbid orchestration skills. Same task text otherwise.
 - Costs/tokens come from `--output-format json`'s per-model usage breakdown.
 - Quality graded by identical objective assertions (gates re-run, greps, diff-scope checks) in all conditions.
 - Models: Fable 5 ($10/$50 per MTok), Opus 4.8 ($5/$25), Sonnet 5 ($3/$15), Haiku 4.5 ($1/$5).
 
-## Small tasks: Model Boss makes things WORSE
+## Predecessor result: small tasks were WORSE
 
 Three small tasks (≤ ~150 changed lines, ≤ 5 files):
 
-| Task | Fable output (with skill) | Fable output (without) | Δ Fable | Total cost with / without | Time with / without |
+| Task | Fable output (with predecessor) | Fable output (baseline) | Δ Fable | Total cost with / baseline | Time with / baseline |
 |---|---|---|---|---|---|
 | Multi-file feature (module + tests) | 4,277 | 2,757 | **+55%** | $1.25 / $0.78 | 121s / 53s |
 | Repo-wide mechanical rename | 1,865 | 1,124 | **+66%** | $0.82 / $0.63 | 83s / 36s |
@@ -89,4 +90,4 @@ Two different wallets:
 
 ## Reproduce
 
-The eval prompts are in [evals/evals.json](evals/evals.json); raw benchmark data is in [benchmarks/](benchmarks/). The four recorded benchmark evals each ran twice (with/without Model Boss) as headless `claude -p` sessions — see Methodology above.
+The eval prompts are in [evals/evals.json](evals/evals.json); raw benchmark data is in [benchmarks/](benchmarks/). The four recorded benchmark evals each contain one predecessor-skill observation and one baseline observation; they were not rerun for Model Boss — see Methodology above.

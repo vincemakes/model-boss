@@ -1,8 +1,10 @@
 # Model Boss skill pressure results
 
+> Historical provenance: these predecessor-skill results were not rerun for Model Boss. In the companion scenario, only the predecessor command token was normalized to `<historical-predecessor-skill>`; the responses below remain the recorded predecessor outputs.
+
 ## RED baseline
 
-The baseline fixture contained no Model Boss files. Raw responses follow verbatim.
+The baseline fixture contained no predecessor-skill files. Raw responses follow verbatim.
 
 ### Scenario A
 
@@ -40,7 +42,7 @@ than `destination_changed`, did not explicitly preserve the tree without destruc
 reconciliation, and did not require a fresh snapshot, patch audit, and authority
 final checkpoint.
 
-## GREEN rewritten skill
+## GREEN rewritten predecessor skill
 
 ### Scenario A
 

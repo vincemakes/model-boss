@@ -1,7 +1,7 @@
 {
   "metadata": {
-    "skill_name": "model-boss",
-    "skill_path": "<path/to/model-boss>",
+    "skill_name": "historical-predecessor",
+    "skill_path": "<historical-predecessor-skill-root>",
     "executor_model": "<model-name>",
     "analyzer_model": "<model-name>",
     "timestamp": "2026-07-02T16:18:50Z",
@@ -11,7 +11,7 @@
       3,
       4
     ],
-    "runs_per_configuration": 3
+    "runs_per_configuration": 1
   },
   "runs": [
     {

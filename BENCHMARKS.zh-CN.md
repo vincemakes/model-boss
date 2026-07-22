@@ -4,23 +4,24 @@
 
 > 历史参考栈说明:这些运行测量的是 2026 年 Claude/Fable/Opus 组合,不能预测 Sol、Kimi 或未来模型 Profile 的节省幅度。`-42%` 与 `-89%` 是记录到的最强模型输出 token 变化;`-34%` 与 `-88%` 是按价格加权的最强模型额度变化,只作为额度代理。盲测 bug-hunt 只是一次单次观察的能力探针,不是普遍性证明。
 
-> 证据路径说明:`benchmarks/benchmark.json` 中采集到的绝对工作区前缀已归一化为 `<historical-workspace>` 以便发布。任务名、闸门输出、测量值及其余证据均未更改;该占位符不表示这些运行发生在 Model Boss 目录下。
+> 发布来源说明:前身身份已归一化为中性标签,采集到的绝对工作区前缀也已归一化为 `<historical-workspace>`。记录的任务、闸门输出、结果以及 token/费用/时间测量值均未更改;该占位符不表示这些运行发生在 Model Boss 目录下。
 
-这些是 Model Boss 所依据的历史参考实测。所有数字来自真实的 headless `claude -p` 运行,通过 CLI 的分模型用量 JSON 直接测得,零估算。每个运行都通过了全部闸门(`tsc --noEmit` + `vitest`)和全部质量断言;**各配置的产出质量完全一致**,差别只在费用、额度和时间。
+这些是 Model Boss 继承的前身测量;Model Boss 本身并未运行这套语料。所有数字来自前身真实的 headless `claude -p` 运行,通过 CLI 的分模型用量 JSON 直接测得,零估算。每个运行都通过了全部闸门(`tsc --noEmit` + `vitest`)和全部质量断言;**各配置的产出质量完全一致**,差别只在费用、额度和时间。
 
 ## 测试方法
 
-- 每组条件都是独立的 headless `claude -p` 会话,跑在同一 fixture 仓库的全新拷贝里(真实 `pnpm` 项目,已 git 初始化)。
-- 使用 Model Boss 的 prompt 调用 Model Boss;baseline 禁用编排 skill,任务文本完全相同。
+- 在继承的四项 eval 语料中,每个任务/配置组合只运行一次,都是独立的 headless `claude -p` 会话,跑在同一 fixture 仓库的全新拷贝里(真实 `pnpm` 项目,已 git 初始化)。
+- 汇总中的 ± 表示四项不同任务之间的离散程度,不是重复试验方差,也不是统计置信度。
+- 前身 skill 的 prompt 调用被测前身;baseline 禁用编排 skill,任务文本完全相同。
 - 费用/token 来自 `--output-format json` 的分模型用量明细。
 - 所有条件用完全相同的客观断言评分(重跑闸门、grep 验证、diff 范围检查)。
 - 模型价格:Fable 5($10/$50 每百万 token)、Opus 4.8($5/$25)、Sonnet 5($3/$15)、Haiku 4.5($1/$5)。
 
-## 小任务:Model Boss 反而更亏
+## 前身结果:小任务反而更亏
 
 三个小任务(≤ ~150 行改动、≤ 5 个文件):
 
-| 任务 | Fable output(用skill) | Fable output(不用) | Δ Fable | 总费用 用/不用 | 耗时 用/不用 |
+| 任务 | Fable output(用前身) | Fable output(baseline) | Δ Fable | 总费用 用/baseline | 耗时 用/baseline |
 |---|---|---|---|---|---|
 | 多文件功能(模块 + 测试) | 4,277 | 2,757 | **+55%** | $1.25 / $0.78 | 121s / 53s |
 | 全仓库机械改名 | 1,865 | 1,124 | **+66%** | $0.82 / $0.63 | 83s / 36s |
@@ -89,4 +90,4 @@
 
 ## 复现
 
-评测 prompt 在 [evals/evals.json](evals/evals.json),原始数据在 [benchmarks/](benchmarks/)。四个已记录的 benchmark eval 各跑两次(带/不带 Model Boss)的 headless `claude -p` 会话——方法见上文。
+评测 prompt 在 [evals/evals.json](evals/evals.json),原始数据在 [benchmarks/](benchmarks/)。四个已记录的 benchmark eval 各包含一次前身 skill 观察和一次 baseline 观察;它们没有以 Model Boss 名义重跑——方法见上文。

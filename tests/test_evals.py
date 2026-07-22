@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import statistics
 import unittest
+from collections import Counter
 from pathlib import Path
 
 
@@ -23,6 +26,16 @@ INPUT_KEYS = {"host", "main_loop", "explicit_mode", "routes", "events"}
 EXPECTED_KEYS = {"mode", "status", "authority", "worker", "states", "evidence"}
 
 FORMER_BRAND = re.compile(r"token[-_ ]saver|fable-token-saver", re.IGNORECASE)
+REPORT_NUMBER = re.compile(
+    r"(?<![\w])[-+−]?\$?\d[\d,.]*(?:%|[kM×s])?(?![\w])"
+)
+
+RECORDED_MEASUREMENT_SHA256 = (
+    "20acbf80a22c62e694acb3476a046198aec65ae877536be655a51d40e7587c4c"
+)
+RECORDED_REPORT_NUMBERS_SHA256 = (
+    "cf1544b91c2612623c6dedbe91d0dc7184d364b05eca913a863e2f371785d728"
+)
 
 ACTIVE_LABELS = {
     "BENCHMARKS.md": "# Model Boss benchmarks",
@@ -31,6 +44,45 @@ ACTIVE_LABELS = {
     "evals/skill-pressure-results.md": "# Model Boss skill pressure results",
     "evals/skill-pressure-scenarios.md": "# Model Boss skill pressure scenarios",
 }
+
+
+def _canonical_sha256(value: object) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _recorded_measurement_projection(benchmark: dict[str, object]) -> dict[str, object]:
+    runs = benchmark["runs"]
+    assert isinstance(runs, list)
+    return {
+        "runs": [
+            {
+                "eval_id": run["eval_id"],
+                "configuration": run["configuration"],
+                "run_number": run["run_number"],
+                "result": run["result"],
+            }
+            for run in runs
+        ],
+        "run_summary": benchmark["run_summary"],
+    }
+
+
+def _report_number_projection() -> dict[str, list[str]]:
+    paths = (
+        "BENCHMARKS.md",
+        "BENCHMARKS.zh-CN.md",
+        "benchmarks/benchmark.md",
+    )
+    return {
+        relative: REPORT_NUMBER.findall((ROOT / relative).read_text(encoding="utf-8"))
+        for relative in paths
+    }
 
 
 class EvaluationBrandingTests(unittest.TestCase):
@@ -46,8 +98,40 @@ class EvaluationBrandingTests(unittest.TestCase):
         evals = json.loads(
             (ROOT / "evals" / "evals.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(benchmark["metadata"]["skill_name"], "model-boss")
         self.assertEqual(evals["skill_name"], "model-boss")
+
+    def test_benchmark_identifies_neutral_predecessor_provenance(self) -> None:
+        benchmark = json.loads(
+            (ROOT / "benchmarks" / "benchmark.json").read_text(encoding="utf-8")
+        )
+        metadata = benchmark["metadata"]
+        self.assertEqual(metadata["skill_name"], "historical-predecessor")
+        self.assertEqual(
+            metadata["skill_path"], "<historical-predecessor-skill-root>"
+        )
+
+        english = (ROOT / "BENCHMARKS.md").read_text(encoding="utf-8")
+        chinese = (ROOT / "BENCHMARKS.zh-CN.md").read_text(encoding="utf-8")
+        report = (ROOT / "benchmarks" / "benchmark.md").read_text(encoding="utf-8")
+        self.assertIn("predecessor measurements inherited by Model Boss", english)
+        self.assertIn("Model Boss 继承的前身测量", chinese)
+        self.assertIn("predecessor measurements inherited by Model Boss", report)
+        self.assertIn("With predecessor skill", report)
+        self.assertIn("Without predecessor skill", report)
+        self.assertIn("Predecessor result: small tasks", english)
+        self.assertIn("前身结果:小任务", chinese)
+        self.assertNotIn("With-Model-Boss prompts", english)
+        self.assertNotIn("Small tasks: Model Boss makes", english)
+        self.assertNotIn("with/without Model Boss", english)
+        self.assertNotIn("With Model Boss", report)
+        self.assertNotIn("Without Model Boss", report)
+
+        evals = json.loads(
+            (ROOT / "evals" / "evals.json").read_text(encoding="utf-8")
+        )
+        self.assertIn("historical predecessor skill", evals["note"])
+        self.assertIn("not rerun for Model Boss", evals["note"])
+        self.assertNotIn("with Model Boss / without Model Boss", evals["note"])
 
     def test_historical_evidence_paths_use_a_documented_neutral_placeholder(self) -> None:
         benchmark = json.loads(
@@ -71,6 +155,80 @@ class EvaluationBrandingTests(unittest.TestCase):
         chinese = (ROOT / "BENCHMARKS.zh-CN.md").read_text(encoding="utf-8")
         self.assertIn("normalized to `<historical-workspace>`", english)
         self.assertIn("归一化为 `<historical-workspace>`", chinese)
+        self.assertIn("predecessor identity", english)
+        self.assertIn("前身身份", chinese)
+
+    def test_record_shape_and_summary_match_single_observations_across_tasks(self) -> None:
+        benchmark = json.loads(
+            (ROOT / "benchmarks" / "benchmark.json").read_text(encoding="utf-8")
+        )
+        metadata = benchmark["metadata"]
+        runs = benchmark["runs"]
+        self.assertEqual(metadata["runs_per_configuration"], 1)
+        self.assertEqual(len(runs), 8)
+        self.assertEqual({run["run_number"] for run in runs}, {1})
+        self.assertEqual(
+            Counter((run["eval_id"], run["configuration"]) for run in runs),
+            Counter(
+                (eval_id, configuration)
+                for eval_id in metadata["evals_run"]
+                for configuration in ("with_skill", "without_skill")
+            ),
+        )
+
+        for configuration in ("with_skill", "without_skill"):
+            selected = [
+                run["result"]
+                for run in runs
+                if run["configuration"] == configuration
+            ]
+            for metric in ("pass_rate", "time_seconds", "tokens"):
+                values = [result[metric] for result in selected]
+                summary = benchmark["run_summary"][configuration][metric]
+                self.assertEqual(summary["mean"], statistics.mean(values))
+                self.assertEqual(summary["stddev"], round(statistics.stdev(values), 4))
+                self.assertEqual(summary["min"], min(values))
+                self.assertEqual(summary["max"], max(values))
+
+        report = (ROOT / "benchmarks" / "benchmark.md").read_text(encoding="utf-8")
+        english = (ROOT / "BENCHMARKS.md").read_text(encoding="utf-8")
+        chinese = (ROOT / "BENCHMARKS.zh-CN.md").read_text(encoding="utf-8")
+        self.assertIn("(1 run each per configuration)", report)
+        self.assertIn("dispersion across four distinct tasks", report)
+        self.assertIn("dispersion across four distinct tasks", english)
+        self.assertIn("四项不同任务之间的离散程度", chinese)
+        for text in (report, english):
+            self.assertIn("not repeated-trial", text)
+
+    def test_recorded_measurement_projection_is_frozen(self) -> None:
+        benchmark = json.loads(
+            (ROOT / "benchmarks" / "benchmark.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            _canonical_sha256(_recorded_measurement_projection(benchmark)),
+            RECORDED_MEASUREMENT_SHA256,
+        )
+        self.assertEqual(
+            _canonical_sha256(_report_number_projection()),
+            RECORDED_REPORT_NUMBERS_SHA256,
+        )
+
+    def test_pressure_artifacts_are_explicitly_historical_and_normalized(self) -> None:
+        scenarios = (ROOT / "evals" / "skill-pressure-scenarios.md").read_text(
+            encoding="utf-8"
+        )
+        results = (ROOT / "evals" / "skill-pressure-results.md").read_text(
+            encoding="utf-8"
+        )
+        for text in (scenarios, results):
+            self.assertIn("were not rerun for Model Boss", text)
+            self.assertIn("<historical-predecessor-skill>", text)
+            self.assertNotIn("/model-boss", text)
+        self.assertIn(
+            '"<historical-predecessor-skill> lite. Refactor', scenarios
+        )
+        self.assertIn("only the predecessor command token", scenarios)
+        self.assertIn("only the predecessor command token", results)
 
     def test_every_positive_trigger_names_model_boss(self) -> None:
         triggers = json.loads(
