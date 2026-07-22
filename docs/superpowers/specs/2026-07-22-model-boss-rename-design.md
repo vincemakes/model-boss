@@ -57,8 +57,8 @@ All active product surfaces move to the new identity:
 | Config files | `config/model-boss.example.json`, `config/model-boss.schema.json` |
 | Environment prefix | `MODEL_BOSS_` |
 | State and task paths | The exact paths defined below |
-| Claude Code agents | `model-boss-<role>.md`; frontmatter `name: model-boss-<role>` |
-| Codex agents | `model-boss-<role>.toml`; TOML `name = "model_boss_<role>"` |
+| Claude Code agents | Bundled `assets/agents/claude-code/<role>.md`; installed as `model-boss-<role>.md`; frontmatter `name: model-boss-<role>` |
+| Codex agents | Bundled `assets/agents/codex/<role>.toml`; installed as `model-boss-<role>.toml`; TOML `name = "model_boss_<role>"` |
 | Release artifact | `dist/model-boss.skill` |
 
 Internal JSON schema IDs, user-agent strings, temporary-directory prefixes, help text,
@@ -127,11 +127,17 @@ The case-insensitive audit rejects `token-saver`, `token_saver`, `TOKEN_SAVER`,
 - `docs/superpowers/specs/2026-07-22-model-boss-rename-design.md`, because it defines
   the migration boundary and mappings.
 - The superseded dated 2026-07-21 spec and plan, which remain immutable design history.
+- `docs/superpowers/plans/2026-07-22-model-boss-rename.md`, which is immutable
+  implementation history after the migration, and `tests/test_branding.py`, which
+  defines and tests the forbidden spellings themselves.
 - A single clearly titled migration section in each README and developer note.
 - The `SKILL.md` description and trigger evaluations that recognize requests to migrate
-  from either former name.
+  from either former name, plus focused documentation/skill/eval assertions for those
+  exact migration strings.
 - Credential-migration tests and implementation literals for the explicit legacy
   `providers.env` source only.
+- Exact package-builder and package-test literals that reject obsolete artifact names;
+  these may appear only in the rejection branch and its focused assertions.
 - Git history and packaged benchmark provenance that would become misleading if its
   original recorded project label were rewritten.
 
