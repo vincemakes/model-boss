@@ -1,0 +1,4 @@
+interface:
+  display_name: "Token Saver"
+  short_description: "Cross-model Lite/Max orchestration"
+  default_prompt: "Use $token-saver to route this coding task through the safest cost-aware Lite or Max topology."
