@@ -1,6 +1,6 @@
 {
-  "skill_name": "token-saver",
-  "note": "Each eval runs twice (with token-saver / without token-saver) as independent headless `claude -p` sessions in fresh copies of the fixture repo. See README Benchmarks for methodology and results.",
+  "skill_name": "model-boss",
+  "note": "The four benchmark evals each ran twice (with Model Boss / without Model Boss) as independent headless `claude -p` sessions in fresh copies of the fixture repo. See the benchmark reports for methodology and results; the final two evals cover rename discovery only.",
   "evals": [
     {
       "id": 1,
@@ -28,6 +28,20 @@
       "name": "large-greenfield-subsystem",
       "prompt": "Build a complete shopping-cart subsystem under src/cart/ (8 modules: types, errors, cart, pricing, inventory, coupons, events, serialization) plus at least 40 test cases under tests/cart/ covering happy paths and edge cases (tier boundaries at 10/50 units, expired coupons, out-of-stock reserve, corrupt payload, event ordering). Do not modify existing files outside src/cart/ and tests/cart/. Both `pnpm typecheck` and `pnpm test` must pass. (Full task text: workspace iteration-2/tasks/large-greenfield-subsystem.txt)",
       "expected_output": "All 8 modules + 40+ tests, gates green, scope respected. This eval sits far above the delegation floor and tests the cost crossover point.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "migration-from-legacy-product",
+      "prompt": "Migrate this repository from Token Saver to Model Boss, including active skill names, commands, configuration paths, docs, and tests while preserving only the documented credential migration boundary.",
+      "expected_output": "All active product surfaces use Model Boss and the explicit migration boundary remains testable.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "migration-from-legacy-repository",
+      "prompt": "This project still uses fable-token-saver; migrate it to Model Boss without leaving a legacy runtime package or command shim, and keep the sealed orchestration behavior unchanged.",
+      "expected_output": "Canonical Model Boss paths replace the legacy repository identity without changing protocol behavior.",
       "files": []
     }
   ]

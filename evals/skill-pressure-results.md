@@ -1,8 +1,8 @@
-# Token Saver skill pressure results
+# Model Boss skill pressure results
 
 ## RED baseline
 
-The baseline fixture contained no Token Saver files. Raw responses follow verbatim.
+The baseline fixture contained no Model Boss files. Raw responses follow verbatim.
 
 ### Scenario A
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -20,6 +21,61 @@ REQUIRED_OUTCOMES = {
 
 INPUT_KEYS = {"host", "main_loop", "explicit_mode", "routes", "events"}
 EXPECTED_KEYS = {"mode", "status", "authority", "worker", "states", "evidence"}
+
+FORMER_BRAND = re.compile(r"token[-_ ]saver|fable-token-saver", re.IGNORECASE)
+
+ACTIVE_LABELS = {
+    "BENCHMARKS.md": "# Model Boss benchmarks",
+    "BENCHMARKS.zh-CN.md": "# Model Boss benchmarks（实测数据）",
+    "benchmarks/benchmark.md": "# Model Boss benchmark",
+    "evals/skill-pressure-results.md": "# Model Boss skill pressure results",
+    "evals/skill-pressure-scenarios.md": "# Model Boss skill pressure scenarios",
+}
+
+
+class EvaluationBrandingTests(unittest.TestCase):
+    def test_active_evaluation_labels_use_model_boss(self) -> None:
+        for relative, expected_heading in ACTIVE_LABELS.items():
+            with self.subTest(path=relative):
+                first_line = (ROOT / relative).read_text(encoding="utf-8").splitlines()[0]
+                self.assertEqual(first_line, expected_heading)
+
+        benchmark = json.loads(
+            (ROOT / "benchmarks" / "benchmark.json").read_text(encoding="utf-8")
+        )
+        evals = json.loads(
+            (ROOT / "evals" / "evals.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(benchmark["metadata"]["skill_name"], "model-boss")
+        self.assertEqual(evals["skill_name"], "model-boss")
+
+    def test_every_positive_trigger_names_model_boss(self) -> None:
+        triggers = json.loads(
+            (ROOT / "benchmarks" / "trigger-eval.json").read_text(encoding="utf-8")
+        )
+        positive = [case for case in triggers if case["should_trigger"]]
+        self.assertTrue(positive)
+        for case in positive:
+            with self.subTest(query=case["query"]):
+                self.assertIn("model boss", case["query"].casefold())
+
+    def test_exactly_two_migration_prompts_recognize_former_names(self) -> None:
+        data = json.loads(
+            (ROOT / "evals" / "evals.json").read_text(encoding="utf-8")
+        )
+        migration_evals = [
+            case for case in data["evals"] if FORMER_BRAND.search(case["prompt"])
+        ]
+
+        self.assertEqual(
+            [case["name"] for case in migration_evals],
+            ["migration-from-legacy-product", "migration-from-legacy-repository"],
+        )
+        self.assertIn("Token Saver", migration_evals[0]["prompt"])
+        self.assertIn("fable-token-saver", migration_evals[1]["prompt"])
+        for case in migration_evals:
+            with self.subTest(case=case["name"]):
+                self.assertIn("model boss", case["prompt"].casefold())
 
 
 class RoutingEvalTests(unittest.TestCase):
