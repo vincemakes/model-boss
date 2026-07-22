@@ -659,10 +659,15 @@ def discover_user_config_path(
     *,
     config_root: Path | str | None = None,
 ) -> Path:
-    """Return the XDG user-config path without changing process environment."""
+    """Return the user-config path without changing process environment."""
 
     if config_root is not None:
         root = Path(config_root)
+        if not root.is_absolute():
+            raise ConfigError(
+                "environment.config_root",
+                "must be absolute",
+            )
     else:
         source = os.environ if environ is None else environ
         xdg_root = source.get("XDG_CONFIG_HOME")
@@ -672,12 +677,26 @@ def discover_user_config_path(
         else:
             home = source.get("HOME")
             home_path = Path(home) if isinstance(home, str) and home else None
-            if home_path is None or not home_path.is_absolute():
-                raise ConfigError(
-                    "environment.config_root",
-                    "requires an absolute XDG_CONFIG_HOME or HOME",
+            if home_path is not None:
+                if not home_path.is_absolute():
+                    raise ConfigError(
+                        "environment.config_root",
+                        "requires an absolute XDG_CONFIG_HOME, HOME, or USERPROFILE",
+                    )
+                root = home_path / ".config"
+            else:
+                userprofile = source.get("USERPROFILE")
+                userprofile_path = (
+                    Path(userprofile)
+                    if isinstance(userprofile, str) and userprofile
+                    else None
                 )
-            root = home_path / ".config"
+                if userprofile_path is None or not userprofile_path.is_absolute():
+                    raise ConfigError(
+                        "environment.config_root",
+                        "requires an absolute XDG_CONFIG_HOME, HOME, or USERPROFILE",
+                    )
+                root = userprofile_path / ".config"
     return root / "model-boss" / "config.json"
 
 

@@ -42,6 +42,18 @@ ZH_HEADINGS = (
     "许可证",
 )
 
+CREDENTIALS_EXAMPLE = """{
+  "version": 1,
+  "credentials": {
+    "GLM_AUTH_TOKEN": "<glm-auth-token>",
+    "GLM_BASE_URL": "<glm-base-url>",
+    "GLM_MODEL": "<glm-model>",
+    "GLM_SMALL_FAST_MODEL": "<glm-small-fast-model>",
+    "KIMI_AUTH_TOKEN": "<kimi-auth-token>",
+    "KIMI_BASE_URL": "<kimi-base-url>"
+  }
+}"""
+
 
 def _headings(text: str) -> tuple[str, ...]:
     return tuple(
@@ -238,6 +250,90 @@ class DocumentationTests(unittest.TestCase):
                     migration,
                     r"(?is)(manual migration|manually migrate|\u624b动迁移).{0,100}"
                     r"(not compatibility|no compatibility|\u4e0d是兼容|\u975e兼容)",
+                )
+
+    def test_provider_setup_docs_make_legacy_import_explicit(self) -> None:
+        documents = (
+            ("en", self.en, "Migrating from Token Saver"),
+            ("zh", self.zh, "从 Token Saver 迁移"),
+            ("devnotes", self.devnotes, "从 Token Saver 迁移"),
+        )
+        command = (
+            "python3 scripts/model-boss.py setup-providers "
+            "--legacy-source <absolute-old-providers.env>"
+        )
+        for language, text, heading in documents:
+            with self.subTest(language=language):
+                active = text[: text.index(f"## {heading}")]
+                migration = _level_two_section(text, heading)
+                self.assertRegex(
+                    active,
+                    r"(?is)(--install-path.{0,180}(wrappers only|"
+                    r"只安装.{0,40}wrapper)|wrappers only.{0,180}--install-path)",
+                )
+                self.assertRegex(
+                    active,
+                    r"(?is)(wrappers alone|wrappers 本身|wrapper 本身).{0,160}"
+                    r"(not make|do not make|不会.{0,40}可用|无法.{0,40}可用)",
+                )
+                self.assertIn(command, migration)
+                self.assertRegex(
+                    migration,
+                    r"(?is)(explicit --legacy-source|"
+                    r"--legacy-source.{0,80}(required|必须|显式))",
+                )
+                self.assertRegex(
+                    migration,
+                    r"(?is)(default legacy|默认.{0,40}旧).{0,120}"
+                    r"(not imported|不会导入)",
+                )
+
+    def test_fresh_provider_credentials_are_complete_private_and_outside_repo(self) -> None:
+        documents = (
+            ("en", self.en, "Migrating from Token Saver"),
+            ("zh", self.zh, "从 Token Saver 迁移"),
+            ("devnotes", self.devnotes, "从 Token Saver 迁移"),
+        )
+        required_names = (
+            "KIMI_BASE_URL",
+            "KIMI_AUTH_TOKEN",
+            "GLM_BASE_URL",
+            "GLM_AUTH_TOKEN",
+            "GLM_MODEL",
+            "GLM_SMALL_FAST_MODEL",
+        )
+        for language, text, heading in documents:
+            with self.subTest(language=language):
+                active = text[: text.index(f"## {heading}")]
+                for name in required_names:
+                    self.assertIn(name, active)
+                self.assertIn(CREDENTIALS_EXAMPLE, active)
+                self.assertIn("0700", active)
+                self.assertIn("0600", active)
+                self.assertRegex(
+                    active,
+                    r"(?is)(never|do not|绝不|不要).{0,120}"
+                    r"(secret|秘密).{0,120}"
+                    r"(repo|repository|config/model-boss\.example\.json|仓库)",
+                )
+
+    def test_windows_docs_match_home_userprofile_runtime_precedence(self) -> None:
+        documents = (
+            ("en", self.en, "Migrating from Token Saver"),
+            ("zh", self.zh, "从 Token Saver 迁移"),
+            ("devnotes", self.devnotes, "从 Token Saver 迁移"),
+        )
+        for language, text, heading in documents:
+            with self.subTest(language=language):
+                active = text[: text.index(f"## {heading}")]
+                self.assertIn("$env:HOME", active)
+                self.assertIn("$env:USERPROFILE", active)
+                self.assertIn("$HOME", active)
+                self.assertRegex(
+                    active,
+                    r"(?is)\$env:HOME.{0,160}(fall(?:s)? back|"
+                    r"\$env:USERPROFILE|回退|否则).{0,160}"
+                    r"\$env:USERPROFILE",
                 )
 
     def test_published_schema_uses_the_canonical_repository(self) -> None:

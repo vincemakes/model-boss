@@ -60,6 +60,7 @@ class CliTests(unittest.TestCase):
         for command in COMMANDS:
             self.assertIn(command, result.stdout)
         self.assertNotIn("shell-command", result.stdout)
+        self.assertIn("explicitly migrate provider data", result.stdout)
 
     def test_credentials_discovery_uses_only_model_boss_contract(self) -> None:
         self.assertEqual(
@@ -81,6 +82,42 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(cli_module.SetupError):
             cli_module._provider_credentials_path(
                 {"HOME": "/home/test", "MODEL_BOSS_CREDENTIALS": "relative.json"}
+            )
+
+    def test_credentials_discovery_uses_userprofile_only_without_home(self) -> None:
+        try:
+            userprofile_path = cli_module._provider_credentials_path(
+                {"USERPROFILE": "/windows/user"}
+            )
+        except cli_module.SetupError as exc:
+            self.fail(f"absolute USERPROFILE was rejected: {exc}")
+        self.assertEqual(
+            userprofile_path,
+            Path("/windows/user/.config/model-boss/credentials.json"),
+        )
+        self.assertEqual(
+            cli_module._provider_credentials_path(
+                {"HOME": "/preferred/home", "USERPROFILE": "/windows/user"}
+            ),
+            Path("/preferred/home/.config/model-boss/credentials.json"),
+        )
+        self.assertEqual(
+            cli_module._provider_credentials_path(
+                {
+                    "XDG_CONFIG_HOME": "/xdg/config",
+                    "HOME": "/preferred/home",
+                    "USERPROFILE": "/windows/user",
+                }
+            ),
+            Path("/xdg/config/model-boss/credentials.json"),
+        )
+        with self.assertRaises(cli_module.SetupError):
+            cli_module._provider_credentials_path(
+                {"HOME": "relative/home", "USERPROFILE": "/windows/user"}
+            )
+        with self.assertRaises(cli_module.SetupError):
+            cli_module._provider_credentials_path(
+                {"USERPROFILE": "relative/user"}
             )
 
     def test_validate_config_prints_one_versioned_json_object(self) -> None:

@@ -821,6 +821,28 @@ class ConfigDiscoveryTests(unittest.TestCase):
             Path("/absolute/home/.config/model-boss/config.json"),
         )
 
+    def test_userprofile_is_used_only_when_home_is_absent(self) -> None:
+        try:
+            userprofile_path = discover_user_config_path(
+                {"USERPROFILE": "/windows/user"}
+            )
+        except ConfigError as exc:
+            self.fail(f"absolute USERPROFILE was rejected: {exc}")
+        self.assertEqual(
+            userprofile_path,
+            Path("/windows/user/.config/model-boss/config.json"),
+        )
+        self.assertEqual(
+            discover_user_config_path(
+                {"HOME": "/preferred/home", "USERPROFILE": "/windows/user"}
+            ),
+            Path("/preferred/home/.config/model-boss/config.json"),
+        )
+        with self.assertRaises(ConfigError):
+            discover_user_config_path(
+                {"HOME": "relative/home", "USERPROFILE": "/windows/user"}
+            )
+
     def test_discovery_rejects_relative_or_missing_environment_roots(self) -> None:
         invalid_environments = (
             {"XDG_CONFIG_HOME": "relative/xdg", "HOME": "relative/home"},
@@ -834,6 +856,9 @@ class ConfigDiscoveryTests(unittest.TestCase):
                 for value in environ.values():
                     self.assertNotIn(value, message)
                 self.assertIsNone(raised.exception.__cause__)
+
+        with self.assertRaises(ConfigError):
+            discover_user_config_path({}, config_root="relative/config")
 
     def test_project_path_is_root_dot_model_boss_json(self) -> None:
         self.assertEqual(

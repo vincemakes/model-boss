@@ -71,6 +71,47 @@ class WrapperTests(unittest.TestCase):
                 (home / ".claude" / "fable-token-saver" / "providers.env").exists()
             )
 
+    def test_wrapper_only_setup_ignores_existing_default_legacy_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as root_text:
+            root = Path(root_text)
+            home = root / "home"
+            legacy = home / ".claude" / "fable-token-saver" / "providers.env"
+            legacy.parent.mkdir(parents=True)
+            original = b"KIMI_AUTH_TOKEN=must-not-import\n"
+            legacy.write_bytes(original)
+            config_root = root / "config"
+            install = root / "bin"
+
+            completed = subprocess.run(
+                (
+                    "bash",
+                    os.fspath(SETUP_SCRIPT),
+                    "--install-path",
+                    os.fspath(install),
+                ),
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    "HOME": os.fspath(home),
+                    "XDG_CONFIG_HOME": os.fspath(config_root),
+                },
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.assertEqual(
+                json.loads(completed.stdout)["setup_status"],
+                "wrappers_configured",
+            )
+            self.assertEqual({path.name for path in install.iterdir()}, set(EXPECTED))
+            self.assertEqual(legacy.read_bytes(), original)
+            self.assertFalse(
+                (config_root / "model-boss" / "credentials.json").exists()
+            )
+
     def test_exact_six_static_wrappers_and_modes(self) -> None:
         with tempfile.TemporaryDirectory() as root_text:
             root = Path(root_text)

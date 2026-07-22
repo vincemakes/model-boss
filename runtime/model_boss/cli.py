@@ -103,7 +103,7 @@ _COMMAND_HELP = {
     "snapshot": "print a redacted diagnostic source-snapshot hash without persisting it",
     "integrate": "integrate one sealed delta only with its sealed final-review receipt",
     "validate-config": "validate one Model Boss configuration file",
-    "setup-providers": "migrate provider data and optionally install compatibility wrappers",
+    "setup-providers": "explicitly migrate provider data and/or install compatibility wrappers",
     "provider-exec": "internal direct-argv provider wrapper entry",
     "cleanup": "consume and remove one abandoned invocation",
 }
@@ -1491,6 +1491,24 @@ def _provider_failure(status: Status, message: str) -> ProviderExecPlan:
     return ProviderExecPlan(status=status, message=message)
 
 
+def _environment_config_root(environment: Mapping[str, str]) -> Path:
+    xdg_value = environment.get("XDG_CONFIG_HOME")
+    xdg_root = Path(xdg_value) if xdg_value else None
+    if xdg_root is not None and xdg_root.is_absolute():
+        return xdg_root
+    home_value = environment.get("HOME")
+    home = Path(home_value) if home_value else None
+    if home is not None:
+        if not home.is_absolute():
+            raise SetupError("configuration home is unavailable")
+        return home / ".config"
+    userprofile_value = environment.get("USERPROFILE")
+    userprofile = Path(userprofile_value) if userprofile_value else None
+    if userprofile is None or not userprofile.is_absolute():
+        raise SetupError("configuration home is unavailable")
+    return userprofile / ".config"
+
+
 def _provider_credentials_path(environment: Mapping[str, str]) -> Path:
     override = environment.get("MODEL_BOSS_CREDENTIALS")
     if override:
@@ -1498,17 +1516,7 @@ def _provider_credentials_path(environment: Mapping[str, str]) -> Path:
         if not candidate.is_absolute():
             raise SetupError("credential override must be absolute")
         return candidate
-    home_value = environment.get("HOME", "")
-    home = Path(home_value)
-    if not home.is_absolute():
-        raise SetupError("HOME is unavailable")
-    xdg_value = environment.get("XDG_CONFIG_HOME")
-    config_root = (
-        Path(xdg_value)
-        if xdg_value and Path(xdg_value).is_absolute()
-        else home / ".config"
-    )
-    return config_root / "model-boss" / "credentials.json"
+    return _environment_config_root(environment) / "model-boss" / "credentials.json"
 
 
 def _provider_credentials(
@@ -2004,31 +2012,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(_json_output(Status.OK))
         return 0
     if arguments.command == "setup-providers":
-        home = Path(os.environ.get("HOME", ""))
-        if not home.is_absolute():
-            print(_json_output(Status.NEEDS_CONTEXT, message="HOME is unavailable"))
-            return 2
-        legacy = Path(arguments.legacy_source) if arguments.legacy_source else (
-            home / ".claude" / "fable-token-saver" / "providers.env"
-        )
-        if arguments.credentials:
-            credential_path = Path(arguments.credentials)
-        else:
-            xdg = os.environ.get("XDG_CONFIG_HOME")
-            config_root = Path(xdg) if xdg and Path(xdg).is_absolute() else home / ".config"
-            credential_path = config_root / "model-boss" / "credentials.json"
         try:
-            migration_requested = (
-                arguments.legacy_source is not None
-                or arguments.credentials is not None
-                or os.path.lexists(legacy)
-                or os.path.lexists(credential_path)
+            legacy = (
+                Path(arguments.legacy_source)
+                if arguments.legacy_source is not None
+                else None
             )
-            if migration_requested:
+            if legacy is not None and not legacy.is_absolute():
+                raise SetupError("legacy source must be absolute")
+            if arguments.credentials is not None:
+                credential_path = Path(arguments.credentials)
+                if not credential_path.is_absolute():
+                    raise SetupError("credential destination must be absolute")
+            elif legacy is not None:
+                credential_path = (
+                    _environment_config_root(os.environ)
+                    / "model-boss"
+                    / "credentials.json"
+                )
+            else:
+                credential_path = None
+            if legacy is not None and credential_path is not None:
                 setup_status = migrate_legacy_credentials(
                     legacy,
                     credential_path,
                 ).status
+            elif arguments.credentials is not None:
+                raise SetupError("credential destination requires a legacy source")
             elif arguments.install_path:
                 setup_status = "wrappers_configured"
             else:

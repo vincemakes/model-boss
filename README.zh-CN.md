@@ -79,7 +79,7 @@ Worker 最多自修三次。最终 Reviewer 最多提出两轮 `revise`；第三
 - Kimi K3 只有在精确身份被固定并由 preflight 验证后，才能作为高级外部路由。
 
 你可以增加未来模型或自定义 CLI 路由，只要它们声明能力和角色，并通过相同的身份、
-权限、沙箱与证据检查。发布的示例与 schema 是 [`config/model-boss.example.json`](config/model-boss.example.json) 和 [`config/model-boss.schema.json`](config/model-boss.schema.json)；项目自动发现 `.model-boss.json`。POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/config.json`，否则使用 `$HOME/.config/model-boss/config.json`。PowerShell 遵循同样的绝对 `XDG_CONFIG_HOME` 规则，否则使用 `$HOME\.config\model-boss\config.json`。Profile 文件位于 [references/profiles](references/profiles)。
+权限、沙箱与证据检查。发布的示例与 schema 是 [`config/model-boss.example.json`](config/model-boss.example.json) 和 [`config/model-boss.schema.json`](config/model-boss.schema.json)；项目自动发现 `.model-boss.json`。POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/config.json`，否则使用 `$HOME/.config/model-boss/config.json`。PowerShell 中，绝对的 `$env:XDG_CONFIG_HOME` 优先；否则运行时先读取绝对的 `$env:HOME`，只在 HOME 缺失时回退到绝对的 `$env:USERPROFILE`。文档显示的 `$HOME\.config\model-boss\config.json` 使用 PowerShell 的 `$HOME` 便捷变量。被选中的根路径缺失或为相对路径时会安全失败。Profile 文件位于 [references/profiles](references/profiles)。
 
 运行时 CLI 需要 Python 3.11+ 与 Git；POSIX 安装示例还会使用 `bash` 和 `install`。
 可写的外部 Worker 还必须有验证过的 OS 后端：macOS 使用
@@ -222,9 +222,36 @@ Codex 可以调用已有 `claude-kimi*` / `claude-glm*` 命令；这不代表 Ki
 bash scripts/setup-model-providers.sh --install-path "$HOME/.local/bin"
 ```
 
-安装脚本不会修改 shell 启动文件；如果需要，请自行把该目录加入 `PATH`。
-如果 credentials 文件不存在，显式 `--install-path` 仍只安装 wrappers，
-不会创建 credentials 文件或虚构秘密值。POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/credentials.json`，否则使用 `$HOME/.config/model-boss/credentials.json`。PowerShell 遵循同样的绝对 `XDG_CONFIG_HOME` 规则，否则使用 `$HOME\.config\model-boss\credentials.json`。绝对路径的 `MODEL_BOSS_CREDENTIALS` 可覆盖自动发现。
+只给出 `--install-path` 时，setup 只安装 wrappers；即使默认旧 credentials 文件存在，也不会检查或导入它。安装脚本不会修改 shell 启动文件；如果需要，请自行把该目录加入 `PATH`。Wrappers 本身不会让 Kimi 或 GLM 可用：还必须配置完整的直接环境或 credentials 文档，并单独安装可信 Provider 二进制。
+
+直接环境中，Kimi 精确需要 `KIMI_BASE_URL` + `KIMI_AUTH_TOKEN`；GLM 精确需要 `GLM_BASE_URL` + `GLM_AUTH_TOKEN` + `GLM_MODEL` + `GLM_SMALL_FAST_MODEL`。
+
+也可以创建严格的 version 1 JSON 文档，并在本地替换占位符：
+
+```json
+{
+  "version": 1,
+  "credentials": {
+    "GLM_AUTH_TOKEN": "<glm-auth-token>",
+    "GLM_BASE_URL": "<glm-base-url>",
+    "GLM_MODEL": "<glm-model>",
+    "GLM_SMALL_FAST_MODEL": "<glm-small-fast-model>",
+    "KIMI_AUTH_TOKEN": "<kimi-auth-token>",
+    "KIMI_BASE_URL": "<kimi-base-url>"
+  }
+}
+```
+
+POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/credentials.json`，否则使用 `$HOME/.config/model-boss/credentials.json`。选中的目录必须为 `0700`，文件必须为 `0600`；HOME 回退路径可执行：
+
+```bash
+chmod 0700 "$HOME/.config/model-boss"
+chmod 0600 "$HOME/.config/model-boss/credentials.json"
+```
+
+PowerShell 中，绝对的 `$env:XDG_CONFIG_HOME` 优先；否则运行时先读取绝对的 `$env:HOME`，只在 HOME 缺失时回退到绝对的 `$env:USERPROFILE`。文档中的 `$HOME\.config\model-boss\credentials.json` 是常见 PowerShell 写法。绝对路径的 `MODEL_BOSS_CREDENTIALS` 可覆盖自动发现。绝不要把秘密放入仓库、`.model-boss.json` 或 `config/model-boss.example.json`。
+
+精确的 wrapper 角色映射如下：
 
 | 路由角色 | Reviewer transport 基础命令 | 只有验证过 OS 沙箱才允许的写命令 |
 |---|---|---|
@@ -335,7 +362,7 @@ Web 与 MCP 工具不可用。task 声明的 gate 命令使用直接参数数组
 
 ## 从 Token Saver 迁移
 
-迁移是显式且 no-overwrite 的。正常自动发现会忽略所有旧路径与旧环境变量。唯一标准的旧 Provider 导入命令是：
+迁移是显式且 no-overwrite 的。正常自动发现会忽略所有旧路径与旧环境变量。`--legacy-source` 必须显式提供才会导入；默认旧文件不会导入（wrapper-only setup 只安装 wrappers）。唯一标准的旧 Provider 导入命令是：
 
 ```bash
 python3 scripts/model-boss.py setup-providers --legacy-source <absolute-old-providers.env>

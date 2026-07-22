@@ -87,7 +87,7 @@ Profiles provide capability-based route defaults:
 
 Those declarations are candidates, not proof. Preflight must verify live reachability, exact effective identity, permissions, credential names, and—when an external command can write—a sandbox bound to that exact invocation.
 
-Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. The published examples and schema are [`config/model-boss.example.json`](config/model-boss.example.json) and [`config/model-boss.schema.json`](config/model-boss.schema.json); project discovery uses `.model-boss.json`. On POSIX, user discovery uses `$XDG_CONFIG_HOME/model-boss/config.json` only when `XDG_CONFIG_HOME` is absolute; otherwise it uses `$HOME/.config/model-boss/config.json`. PowerShell follows the same absolute-`XDG_CONFIG_HOME` rule and otherwise uses `$HOME\.config\model-boss\config.json`. See [routing and capability resolution](references/routing.md) for the complete rules.
+Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. The published examples and schema are [`config/model-boss.example.json`](config/model-boss.example.json) and [`config/model-boss.schema.json`](config/model-boss.schema.json); project discovery uses `.model-boss.json`. On POSIX, user discovery uses `$XDG_CONFIG_HOME/model-boss/config.json` only when `XDG_CONFIG_HOME` is absolute; otherwise it uses `$HOME/.config/model-boss/config.json`. On PowerShell, an absolute `$env:XDG_CONFIG_HOME` wins; otherwise the runtime reads absolute `$env:HOME` and falls back to absolute `$env:USERPROFILE` only when HOME is absent. The displayed fallback `$HOME\.config\model-boss\config.json` uses PowerShell's `$HOME` convenience variable. Missing or relative selected roots fail closed. See [routing and capability resolution](references/routing.md) for the complete rules.
 
 The runtime CLI requires Python 3.11+ and Git. The POSIX setup examples also use `bash` and `install`. A write-capable external worker additionally requires a verified OS backend: `/usr/bin/sandbox-exec` on macOS or Bubblewrap (`bwrap`) on Linux, including WSL. Native Windows has no external-writer backend and uses host-native Claude Code or Codex agents instead.
 
@@ -219,9 +219,36 @@ From the installed checkout, install the compatibility wrappers into an explicit
 bash scripts/setup-model-providers.sh --install-path "$HOME/.local/bin"
 ```
 
-The setup command never edits shell startup files; add that directory to `PATH` yourself if necessary. Its exact role mapping is:
+With only `--install-path`, setup installs wrappers only. It does not inspect or import the default legacy credential file, even when that file exists, and it never edits shell startup files. Add the directory to `PATH` yourself if necessary. Wrappers alone do not make Kimi or GLM available: configure a complete direct environment or credentials document and install the trusted provider binary separately.
 
-If the credentials file does not exist, an explicit `--install-path` still installs the wrappers only; it does not create a credentials file or invent secret values. On POSIX, credentials discovery uses `$XDG_CONFIG_HOME/model-boss/credentials.json` only when `XDG_CONFIG_HOME` is absolute, and otherwise `$HOME/.config/model-boss/credentials.json`. PowerShell follows the same absolute-`XDG_CONFIG_HOME` rule and otherwise uses `$HOME\.config\model-boss\credentials.json`. An absolute `MODEL_BOSS_CREDENTIALS` overrides discovery.
+For direct environment setup, Kimi requires exactly `KIMI_BASE_URL` + `KIMI_AUTH_TOKEN`. GLM requires exactly `GLM_BASE_URL` + `GLM_AUTH_TOKEN` + `GLM_MODEL` + `GLM_SMALL_FAST_MODEL`.
+
+Alternatively, create a strict version 1 JSON document with placeholders replaced locally:
+
+```json
+{
+  "version": 1,
+  "credentials": {
+    "GLM_AUTH_TOKEN": "<glm-auth-token>",
+    "GLM_BASE_URL": "<glm-base-url>",
+    "GLM_MODEL": "<glm-model>",
+    "GLM_SMALL_FAST_MODEL": "<glm-small-fast-model>",
+    "KIMI_AUTH_TOKEN": "<kimi-auth-token>",
+    "KIMI_BASE_URL": "<kimi-base-url>"
+  }
+}
+```
+
+On POSIX, credentials discovery uses `$XDG_CONFIG_HOME/model-boss/credentials.json` only when `XDG_CONFIG_HOME` is absolute, and otherwise `$HOME/.config/model-boss/credentials.json`. Secure the chosen directory as `0700` and the file as `0600`; for the HOME fallback:
+
+```bash
+chmod 0700 "$HOME/.config/model-boss"
+chmod 0600 "$HOME/.config/model-boss/credentials.json"
+```
+
+On PowerShell, an absolute `$env:XDG_CONFIG_HOME` wins; otherwise the runtime reads absolute `$env:HOME` and falls back to absolute `$env:USERPROFILE` only when HOME is absent. The displayed `$HOME\.config\model-boss\credentials.json` is the normal PowerShell spelling. An absolute `MODEL_BOSS_CREDENTIALS` overrides discovery. Never put secrets in the repository, `.model-boss.json`, or `config/model-boss.example.json`.
+
+The exact wrapper role mapping is:
 
 | Route role | Reviewer transport base command | Write command allowed only inside verified OS sandbox |
 |---|---|---|
@@ -345,7 +372,7 @@ Stepping aside leaves the inherited main loop in charge. It does not switch mode
 
 ## Migrating from Token Saver
 
-Migration is explicit and no-overwrite. Normal discovery ignores all former paths and old variables. The only canonical legacy-provider import is:
+Migration is explicit and no-overwrite. Normal discovery ignores all former paths and old variables. An explicit --legacy-source is required for any legacy import; the default legacy file is not imported by wrapper-only setup. The only canonical legacy-provider import is:
 
 ```bash
 python3 scripts/model-boss.py setup-providers --legacy-source <absolute-old-providers.env>

@@ -3,11 +3,17 @@ from __future__ import annotations
 import json
 import os
 import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from runtime.model_boss.setup import SetupError, migrate_legacy_credentials, parse_legacy_env
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "model-boss.py"
 
 
 class LegacyParserTests(unittest.TestCase):
@@ -118,6 +124,143 @@ class CredentialMigrationTests(unittest.TestCase):
             os.symlink(real_parent, parent)
             with self.assertRaises(SetupError):
                 migrate_legacy_credentials(real_source, parent / "credentials.json")
+
+
+class SetupDiscoveryTests(unittest.TestCase):
+    def _run(
+        self,
+        *arguments: str,
+        environment: dict[str, str],
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            (sys.executable, os.fspath(SCRIPT), "setup-providers", *arguments),
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    def test_setup_uses_userprofile_only_when_home_is_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as root_text:
+            root = Path(root_text)
+            source = root / "providers.env"
+            source.write_text("KIMI_AUTH_TOKEN=secret\n", encoding="utf-8")
+            userprofile = root / "windows-user"
+            userprofile.mkdir()
+            (userprofile / ".config").mkdir()
+            environment = {**os.environ, "USERPROFILE": os.fspath(userprofile)}
+            environment.pop("HOME", None)
+            environment.pop("XDG_CONFIG_HOME", None)
+
+            result = self._run(
+                "--legacy-source",
+                os.fspath(source),
+                environment=environment,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(
+                (userprofile / ".config" / "model-boss" / "credentials.json").is_file()
+            )
+
+    def test_setup_home_precedes_userprofile(self) -> None:
+        with tempfile.TemporaryDirectory() as root_text:
+            root = Path(root_text)
+            source = root / "providers.env"
+            source.write_text("KIMI_AUTH_TOKEN=secret\n", encoding="utf-8")
+            home = root / "home"
+            home.mkdir()
+            (home / ".config").mkdir()
+            userprofile = root / "windows-user"
+            userprofile.mkdir()
+            (userprofile / ".config").mkdir()
+            environment = {
+                **os.environ,
+                "HOME": os.fspath(home),
+                "USERPROFILE": os.fspath(userprofile),
+            }
+            environment.pop("XDG_CONFIG_HOME", None)
+
+            result = self._run(
+                "--legacy-source",
+                os.fspath(source),
+                environment=environment,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(
+                (home / ".config" / "model-boss" / "credentials.json").is_file()
+            )
+            self.assertFalse((userprofile / ".config" / "model-boss").exists())
+
+    def test_setup_absolute_xdg_precedes_home_and_userprofile(self) -> None:
+        with tempfile.TemporaryDirectory() as root_text:
+            root = Path(root_text)
+            source = root / "providers.env"
+            source.write_text("KIMI_AUTH_TOKEN=secret\n", encoding="utf-8")
+            xdg = root / "xdg"
+            xdg.mkdir()
+            home = root / "home"
+            home.mkdir()
+            userprofile = root / "windows-user"
+            userprofile.mkdir()
+
+            result = self._run(
+                "--legacy-source",
+                os.fspath(source),
+                environment={
+                    **os.environ,
+                    "XDG_CONFIG_HOME": os.fspath(xdg),
+                    "HOME": os.fspath(home),
+                    "USERPROFILE": os.fspath(userprofile),
+                },
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(
+                (xdg / "model-boss" / "credentials.json").is_file()
+            )
+            self.assertFalse((home / ".config" / "model-boss").exists())
+            self.assertFalse((userprofile / ".config" / "model-boss").exists())
+
+    def test_setup_rejects_relative_home_even_with_absolute_userprofile(self) -> None:
+        with tempfile.TemporaryDirectory() as root_text:
+            root = Path(root_text)
+            source = root / "providers.env"
+            source.write_text("KIMI_AUTH_TOKEN=secret\n", encoding="utf-8")
+
+            result = self._run(
+                "--legacy-source",
+                os.fspath(source),
+                environment={
+                    **os.environ,
+                    "HOME": "relative/home",
+                    "USERPROFILE": root_text,
+                },
+            )
+
+            self.assertEqual(result.returncode, 2)
+
+    def test_setup_rejects_relative_explicit_legacy_source(self) -> None:
+        with tempfile.TemporaryDirectory() as root_text:
+            root = Path(root_text)
+            source = root / "providers.env"
+            source.write_text("KIMI_AUTH_TOKEN=secret\n", encoding="utf-8")
+            destination = root / "credentials.json"
+            relative_source = os.path.relpath(source, ROOT)
+
+            result = self._run(
+                "--legacy-source",
+                relative_source,
+                "--credentials",
+                os.fspath(destination),
+                environment={**os.environ, "HOME": root_text},
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(destination.exists())
 
 
 if __name__ == "__main__":
