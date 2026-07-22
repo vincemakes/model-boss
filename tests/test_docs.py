@@ -64,7 +64,14 @@ class DocumentationTests(unittest.TestCase):
         cls.devnotes = (ROOT / "docs" / "DEVNOTES.zh-CN.md").read_text(
             encoding="utf-8"
         )
-        cls.plan = (
+        cls.historical_plan = (
+            ROOT
+            / "docs"
+            / "superpowers"
+            / "plans"
+            / "2026-07-21-token-saver-cross-platform.md"
+        ).read_text(encoding="utf-8")
+        cls.rename_plan = (
             ROOT
             / "docs"
             / "superpowers"
@@ -136,10 +143,23 @@ class DocumentationTests(unittest.TestCase):
             "https://github.com/vincemakes/model-boss/config/model-boss.schema.json",
         )
 
-    def test_plan_maps_and_packages_the_canonical_runtime(self) -> None:
+    def test_historical_plan_maps_and_packages_the_sealed_bundle_module(self) -> None:
         self.assertGreaterEqual(
-            self.plan.count("runtime/model_boss/"),
+            self.historical_plan.count("runtime/token_saver/bundle.py"),
             2,
+        )
+
+    def test_rename_plan_preserves_runtime_and_packaging_contracts(self) -> None:
+        self.assertIn(
+            "- `runtime/model_boss/` — renamed runtime package; protocol behavior "
+            "remains unchanged.",
+            self.rename_plan,
+        )
+        self.assertIn(
+            "- `runtime/model_boss/package.py`, `scripts/package-skill.sh`, and "
+            "`scripts/validate.sh` — deterministic `dist/model-boss.skill` production "
+            "and validation.",
+            self.rename_plan,
         )
 
     def test_lite_and_max_topologies_include_optional_third_level(self) -> None:

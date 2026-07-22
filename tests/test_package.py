@@ -45,6 +45,24 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(result.sha256, hashlib.sha256(output.read_bytes()).hexdigest())
         return output
 
+    def _assert_obsolete_output_is_preserved(self, directory: Path, name: str) -> None:
+        output = directory / name
+        sentinel = b"existing-obsolete-package"
+        output.write_bytes(sentinel)
+        before = {
+            path.name: path.read_bytes()
+            for path in directory.iterdir()
+        }
+
+        with self.assertRaisesRegex(PackageError, "obsolete"):
+            build_package(ROOT, output)
+
+        self.assertEqual(output.read_bytes(), sentinel)
+        self.assertEqual(
+            {path.name: path.read_bytes() for path in directory.iterdir()},
+            before,
+        )
+
     def test_archive_has_exact_safe_manifest_and_root(self) -> None:
         with tempfile.TemporaryDirectory(prefix="model-boss-package-test-") as text:
             output = self._build(Path(text))
@@ -138,13 +156,17 @@ class PackageTests(unittest.TestCase):
 
     def test_obsolete_artifact_name_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="model-boss-package-test-") as text:
-            with self.assertRaisesRegex(PackageError, "obsolete"):
-                build_package(ROOT, Path(text) / "token-saver.skill")
+            self._assert_obsolete_output_is_preserved(
+                Path(text),
+                "token-saver.skill",
+            )
 
     def test_prefixed_obsolete_artifact_name_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="model-boss-package-test-") as text:
-            with self.assertRaisesRegex(PackageError, "obsolete"):
-                build_package(ROOT, Path(text) / "fable-token-saver.skill")
+            self._assert_obsolete_output_is_preserved(
+                Path(text),
+                "fable-token-saver.skill",
+            )
 
     def test_manifest_sources_are_regular_non_symlinks(self) -> None:
         for relative in PACKAGE_MANIFEST:
