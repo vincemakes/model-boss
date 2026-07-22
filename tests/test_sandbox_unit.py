@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.token_saver.models import (
+from runtime.model_boss.models import (
     CapabilityBand,
     Role,
     Route,
@@ -15,7 +15,7 @@ from runtime.token_saver.models import (
     Transport,
     WorkerSandboxIdentity,
 )
-from runtime.token_saver.sandbox import (
+from runtime.model_boss.sandbox import (
     ConformanceProbe,
     SandboxPolicy,
     UnavailableSandbox,
@@ -27,7 +27,7 @@ from runtime.token_saver.sandbox import (
 
 class SandboxPolicyTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(prefix="token-saver-sandbox-unit-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="model-boss-sandbox-unit-")
         self.root = Path(self.temporary.name).resolve()
         self.worktree = self._directory("worktree")
         self.route_state = self._directory("route-state")
@@ -193,7 +193,7 @@ class SandboxPolicyTests(unittest.TestCase):
 
 class SandboxRenderingTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(prefix="token-saver-render-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="model-boss-render-")
         root = Path(self.temporary.name).resolve()
         self.worktree = root / "worktree"
         self.state = root / "route-state"
@@ -368,7 +368,7 @@ class SandboxRenderingTests(unittest.TestCase):
 
 class VerifiedSandboxBindingTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(prefix="token-saver-binding-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="model-boss-binding-")
         root = Path(self.temporary.name).resolve()
         self.worktree = root / "worktree"
         self.state = root / "state"

@@ -909,7 +909,7 @@ def create_worktree(
         route_state.mkdir(mode=0o700, exist_ok=True)
         object_directory = Path(
             tempfile.mkdtemp(
-                prefix=f".{destination.name}.token-saver-objects-",
+                prefix=f".{destination.name}.model-boss-objects-",
                 dir=route_state,
             )
         )
@@ -1007,7 +1007,7 @@ def _temporary_index_tree(
     paths: tuple[bytes, ...],
 ) -> bytes:
     repo = handle.path
-    descriptor, name = tempfile.mkstemp(prefix="token-saver-index-", dir=repo.parent)
+    descriptor, name = tempfile.mkstemp(prefix="model-boss-index-", dir=repo.parent)
     os.close(descriptor)
     os.unlink(name)
     try:
@@ -1181,7 +1181,7 @@ def capture_worker_delta(
     if projected.staged != snapshot.staged:
         raise ScopeViolationError("worker changed the disposable Git index")
 
-    descriptor, name = tempfile.mkstemp(prefix="token-saver-delta-index-", dir=handle.path.parent)
+    descriptor, name = tempfile.mkstemp(prefix="model-boss-delta-index-", dir=handle.path.parent)
     os.close(descriptor)
     os.unlink(name)
     try:
@@ -1272,7 +1272,7 @@ def replay_worker_delta_projection(
     repository = _resolve_repository(repo)
     handle: WorktreeHandle | None = None
     primary_error: BaseException | None = None
-    with tempfile.TemporaryDirectory(prefix="token-saver-delta-replay-") as root:
+    with tempfile.TemporaryDirectory(prefix="model-boss-delta-replay-") as root:
         worktree_path = Path(root) / "worktree"
         try:
             handle = create_worktree(repository, snapshot, worktree_path)

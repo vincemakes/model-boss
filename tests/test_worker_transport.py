@@ -7,15 +7,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.token_saver.cli import GateSpec, WorkerTask, orchestrate_worker
-from runtime.token_saver.models import CapabilityBand, Role, Route, Transport
-from runtime.token_saver.repository import (
+from runtime.model_boss.cli import (
+    GateEvidence,
+    GateSpec,
+    WorkerTask,
+    _retry_packet,
+    orchestrate_worker,
+)
+from runtime.model_boss.models import CapabilityBand, Role, Route, Status, Transport
+from runtime.model_boss.repository import (
     capture_source_snapshot,
     create_worktree,
     materialize_snapshot,
 )
-from runtime.token_saver.resources import create_invocation_resources
-from runtime.token_saver.sandbox import (
+from runtime.model_boss.resources import create_invocation_resources
+from runtime.model_boss.sandbox import (
     ConformanceProbe,
     SandboxPolicy,
     UnavailableSandbox,
@@ -35,17 +41,36 @@ def _git(repo: Path, *args: str) -> None:
             "LC_ALL": "C",
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_AUTHOR_NAME": "Token Saver",
+            "GIT_AUTHOR_NAME": "Model Boss",
             "GIT_AUTHOR_EMAIL": "test@example.invalid",
-            "GIT_COMMITTER_NAME": "Token Saver",
+            "GIT_COMMITTER_NAME": "Model Boss",
             "GIT_COMMITTER_EMAIL": "test@example.invalid",
         },
     )
 
 
 class WorkerOrchestrationTests(unittest.TestCase):
+    def test_retry_packet_uses_model_boss_trusted_gate_field(self) -> None:
+        packet = _retry_packet(
+            b"retry",
+            (
+                GateEvidence(
+                    argv=("python3", "-m", "unittest"),
+                    cwd=".",
+                    status=Status.GATE_FAILED,
+                    exit_code=1,
+                    stdout_hash="a" * 64,
+                    stderr_hash="b" * 64,
+                    duration_seconds=0.1,
+                ),
+            ),
+        )
+
+        self.assertIn(b"MODEL_BOSS_TRUSTED_GATE_FAILURES=", packet)
+        self.assertNotIn(b"TOKEN_SAVER_TRUSTED_GATE_FAILURES=", packet)
+
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory(prefix="token-saver-worker-test-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="model-boss-worker-test-")
         root = Path(self.temporary.name)
         self.repo = root / "repo"
         self.repo.mkdir()

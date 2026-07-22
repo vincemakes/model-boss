@@ -197,7 +197,7 @@ def migrate_legacy_credentials(
     raw = _require_regular_source(source_path)
     payload = _credential_document(parse_legacy_env(raw))
     temporary = parent / (
-        f".{destination_path.name}.token-saver-{os.getpid()}-{secrets.token_hex(12)}.tmp"
+        f".{destination_path.name}.model-boss-{os.getpid()}-{secrets.token_hex(12)}.tmp"
     )
     descriptor = -1
     installed = False

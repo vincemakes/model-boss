@@ -1,4 +1,4 @@
-"""Model-independent Token Saver runtime contracts and configuration."""
+"""Model-independent Model Boss runtime contracts and configuration."""
 
 from .config import (
     SCHEMA_VERSION,

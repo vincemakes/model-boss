@@ -1,4 +1,4 @@
-"""Pure authority-topology resolution for Token Saver Lite and Max modes."""
+"""Pure authority-topology resolution for Model Boss Lite and Max modes."""
 
 from __future__ import annotations
 

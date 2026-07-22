@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.token_saver.models import Status
-from runtime.token_saver.sandbox import (
+from runtime.model_boss.models import Status
+from runtime.model_boss.sandbox import (
     SandboxPolicy,
     UnavailableSandbox,
     VerifiedSandbox,
@@ -25,7 +25,7 @@ _SANDBOX_EXEC = Path("/usr/bin/sandbox-exec")
 )
 class MacOSSandboxConformanceTests(unittest.TestCase):
     def test_real_probe_passes_every_boundary_before_route_can_launch(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="token-saver-macos-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="model-boss-macos-") as temporary:
             root = Path(temporary).resolve()
             worktree = root / "worktree"
             state = root / "state"
@@ -76,7 +76,7 @@ class MacOSSandboxConformanceTests(unittest.TestCase):
             self.assertEqual(launch.argv[-len(route_argv) :], selected.route_argv)
 
     def test_missing_backend_returns_unavailable_without_route_launch(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="token-saver-macos-missing-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="model-boss-macos-missing-") as temporary:
             root = Path(temporary).resolve()
             worktree = root / "worktree"
             state = root / "state"

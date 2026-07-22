@@ -11,9 +11,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
-import runtime.token_saver.integration as integration_module
-from runtime.token_saver.bundle import seal_delta_bundle
-from runtime.token_saver.evidence import (
+import runtime.model_boss.integration as integration_module
+from runtime.model_boss.bundle import seal_delta_bundle
+from runtime.model_boss.evidence import (
     ApprovalBinding,
     CanonicalPatch,
     EvidenceRecord,
@@ -27,12 +27,12 @@ from runtime.token_saver.evidence import (
     encode_source_snapshot,
     encode_worker_delta,
 )
-from runtime.token_saver.integration import (
+from runtime.model_boss.integration import (
     Approval,
     integrate_reviewed_delta,
     integrate_sealed_delta_bundle,
 )
-from runtime.token_saver.repository import (
+from runtime.model_boss.repository import (
     RepositoryError,
     capture_source_snapshot,
     capture_worker_delta,
@@ -40,7 +40,7 @@ from runtime.token_saver.repository import (
     materialize_snapshot,
     project_task_patch,
 )
-from runtime.token_saver.resources import (
+from runtime.model_boss.resources import (
     CleanupResult,
     cleanup_invocation,
     create_invocation_resources,
@@ -313,7 +313,7 @@ class DestinationGuardTests(unittest.TestCase):
             private_summary=snapshot.private_summary,
         )
         approval = _approval_for(snapshot, EMPTY_DELTA, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, delta: projected
         repository_stub.capture_destination = (
             lambda repo, allowed_paths: mutated_destination
@@ -352,7 +352,7 @@ class DestinationGuardTests(unittest.TestCase):
             private_summary=snapshot.private_summary,
         )
         approval = _approval_for(snapshot, EMPTY_DELTA, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, delta: projected
         repository_stub.capture_destination = (
             lambda repo, allowed_paths: mutated_destination
@@ -401,7 +401,7 @@ class DestinationGuardTests(unittest.TestCase):
             private_summary=snapshot.private_summary,
         )
         approval = _approval_for(snapshot, EMPTY_DELTA, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, delta: projected
         repository_stub.capture_destination = (
             lambda repo, allowed_paths: mutated_destination
@@ -429,7 +429,7 @@ class DestinationGuardTests(unittest.TestCase):
             private_summary=snapshot.private_summary,
         )
         approval = _approval_for(snapshot, delta, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, worker_delta: projected
         repository_stub.capture_destination = lambda repo, allowed_paths: snapshot
 
@@ -447,7 +447,7 @@ class DestinationGuardTests(unittest.TestCase):
     def test_destination_capture_error_returns_structured_changed_result(self) -> None:
         projected = project_task_patch(EMPTY_SNAPSHOT, EMPTY_DELTA)
         approval = _approval_for(EMPTY_SNAPSHOT, EMPTY_DELTA, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = project_task_patch
 
         def capture_destination(repo: Path, allowed_paths: tuple[bytes, ...]):
@@ -470,13 +470,13 @@ class DestinationGuardTests(unittest.TestCase):
 class RealGitIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory(
-            prefix="token-saver-integration-test-"
+            prefix="model-boss-integration-test-"
         )
         self.repo = Path(self.temporary_directory.name) / "repo"
         self.repo.mkdir()
         _git(self.repo, "init", "-q")
-        _git(self.repo, "config", "user.name", "Token Saver Test")
-        _git(self.repo, "config", "user.email", "token-saver@example.invalid")
+        _git(self.repo, "config", "user.name", "Model Boss Test")
+        _git(self.repo, "config", "user.email", "model-boss@example.invalid")
         _git(self.repo, "config", "core.autocrlf", "false")
         (self.repo / "task.txt").write_bytes(b"actual\n")
         _git(self.repo, "add", "--", "task.txt")
@@ -686,7 +686,7 @@ class RealGitIntegrationTests(unittest.TestCase):
             private_summary=snapshot.private_summary,
         )
         approval = _approval_for(snapshot, delta, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, worker_delta: projected
         repository_stub.capture_destination = lambda repo, allowed_paths: snapshot
         before = _worktree_state(self.repo, snapshot)
@@ -724,7 +724,7 @@ class RealGitIntegrationTests(unittest.TestCase):
             private_summary=snapshot.private_summary,
         )
         approval = _approval_for(snapshot, delta, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, worker_delta: projected
         repository_stub.capture_destination = lambda repo, allowed_paths: snapshot
         before = _worktree_state(self.repo, snapshot)
@@ -764,7 +764,7 @@ class RealGitIntegrationTests(unittest.TestCase):
             private_summary=snapshot.private_summary,
         )
         approval = _approval_for(snapshot, delta, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, worker_delta: projected
         repository_stub.capture_destination = lambda repo, allowed_paths: snapshot
         before = _worktree_state(self.repo, snapshot)
@@ -810,7 +810,7 @@ class RealGitIntegrationTests(unittest.TestCase):
             unstaged=(worker_record,),
         )
         approval = _approval_for(snapshot, delta, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, worker_delta: projected
 
         def capture_destination(repo: Path, allowed_paths: tuple[bytes, ...]):
@@ -866,7 +866,7 @@ class RealGitIntegrationTests(unittest.TestCase):
             unstaged=(raced_record,),
         )
         approval = _approval_for(snapshot, delta, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, worker_delta: projected
         captures = 0
 
@@ -910,7 +910,7 @@ class RealGitIntegrationTests(unittest.TestCase):
             untracked=(binary_record,),
         )
         approval = _approval_for(snapshot, delta, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, worker_delta: projected
         repository_stub.capture_destination = (
             lambda repo, allowed_paths: (
@@ -955,7 +955,7 @@ class RealGitIntegrationTests(unittest.TestCase):
             unstaged=(mode_record,),
         )
         approval = _approval_for(snapshot, delta, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, worker_delta: projected
         repository_stub.capture_destination = (
             lambda repo, allowed_paths: (
@@ -1007,7 +1007,7 @@ class RealGitIntegrationTests(unittest.TestCase):
             untracked=(symlink_record,),
         )
         approval = _approval_for(snapshot, delta, projected)
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda source, worker_delta: projected
         repository_stub.capture_destination = (
             lambda repo, allowed_paths: (
@@ -1613,7 +1613,7 @@ class ApprovalAndScopeGuardTests(unittest.TestCase):
             "path",
             b"../escaped.txt",
         )
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
 
         def project_task_patch(source: SourceSnapshot, worker_delta: WorkerDelta):
             projected_source = worker_delta.projected_snapshot or source
@@ -1740,7 +1740,7 @@ class ApprovalAndScopeGuardTests(unittest.TestCase):
             binding=binding,
             approval_binding_hash=binding.canonical_hash,
         )
-        repository_stub = types.ModuleType("runtime.token_saver.repository")
+        repository_stub = types.ModuleType("runtime.model_boss.repository")
         repository_stub.project_task_patch = lambda snapshot, delta: projected
         repository_stub.capture_destination = lambda repo, allowed_paths: EMPTY_SNAPSHOT
 

@@ -12,16 +12,16 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-import runtime.token_saver.cli as cli_module
-from runtime.token_saver.bundle import SealedGateEvidence, seal_delta_bundle
-from runtime.token_saver.evidence import WorkerDelta
-from runtime.token_saver.models import Status
-from runtime.token_saver.repository import capture_source_snapshot
-from runtime.token_saver.resources import CleanupResult, create_invocation_resources
+import runtime.model_boss.cli as cli_module
+from runtime.model_boss.bundle import SealedGateEvidence, seal_delta_bundle
+from runtime.model_boss.evidence import WorkerDelta
+from runtime.model_boss.models import Status
+from runtime.model_boss.repository import capture_source_snapshot
+from runtime.model_boss.resources import CleanupResult, create_invocation_resources
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "token-saver-route.py"
+SCRIPT = ROOT / "scripts" / "model-boss.py"
 COMMANDS = (
     "resolve",
     "review",
@@ -54,14 +54,39 @@ class CliTests(unittest.TestCase):
     def test_help_exposes_exact_command_surface(self) -> None:
         result = self._run("--help")
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith("usage: model-boss "))
+        self.assertNotIn("model-boss-route", result.stdout)
+        self.assertIn("Model Boss", result.stdout)
         for command in COMMANDS:
             self.assertIn(command, result.stdout)
         self.assertNotIn("shell-command", result.stdout)
 
+    def test_credentials_discovery_uses_only_model_boss_contract(self) -> None:
+        self.assertEqual(
+            cli_module._provider_credentials_path(
+                {"HOME": "/home/test", "TOKEN_SAVER_CREDENTIALS": "/legacy.json"}
+            ),
+            Path("/home/test/.config/model-boss/credentials.json"),
+        )
+        self.assertEqual(
+            cli_module._provider_credentials_path(
+                {
+                    "HOME": "/home/test",
+                    "XDG_CONFIG_HOME": "/xdg",
+                    "MODEL_BOSS_CREDENTIALS": "/explicit/credentials.json",
+                }
+            ),
+            Path("/explicit/credentials.json"),
+        )
+        with self.assertRaises(cli_module.SetupError):
+            cli_module._provider_credentials_path(
+                {"HOME": "/home/test", "MODEL_BOSS_CREDENTIALS": "relative.json"}
+            )
+
     def test_validate_config_prints_one_versioned_json_object(self) -> None:
         result = self._run(
             "validate-config",
-            str(ROOT / "config" / "token-saver.example.json"),
+            str(ROOT / "config" / "model-boss.example.json"),
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         value = json.loads(result.stdout)
@@ -100,7 +125,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(value["status"], "sandbox_unavailable")
 
     def test_worker_cleanup_failure_reports_retained_recovery_manifest(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="token-saver-cleanup-report-") as root_text:
+        with tempfile.TemporaryDirectory(prefix="model-boss-cleanup-report-") as root_text:
             root = Path(root_text)
             repository = root / "repository"
             repository.mkdir()
@@ -197,7 +222,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("gpt-5.6-sol", " ".join(value["facts"]))
 
     def test_snapshot_outputs_only_hashes_and_redacted_counts(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="token-saver-cli-snapshot-") as root_text:
+        with tempfile.TemporaryDirectory(prefix="model-boss-cli-snapshot-") as root_text:
             root = Path(root_text)
             repository = root / "repository"
             repository.mkdir()
@@ -208,7 +233,7 @@ class CliTests(unittest.TestCase):
                     "-C",
                     os.fspath(repository),
                     "-c",
-                    "user.name=Token Saver",
+                    "user.name=Model Boss",
                     "-c",
                     "user.email=test@example.invalid",
                     "commit",
@@ -222,9 +247,9 @@ class CliTests(unittest.TestCase):
             (repository / "allowed.txt").write_text("base\n", encoding="utf-8")
             git_environment = {
                 **os.environ,
-                "GIT_AUTHOR_NAME": "Token Saver",
+                "GIT_AUTHOR_NAME": "Model Boss",
                 "GIT_AUTHOR_EMAIL": "test@example.invalid",
-                "GIT_COMMITTER_NAME": "Token Saver",
+                "GIT_COMMITTER_NAME": "Model Boss",
                 "GIT_COMMITTER_EMAIL": "test@example.invalid",
             }
             subprocess.run(
@@ -282,7 +307,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(len(value["private_aggregate_hash"]), 64)
 
     def test_review_executes_only_the_hardened_external_transport(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="token-saver-cli-review-") as root_text:
+        with tempfile.TemporaryDirectory(prefix="model-boss-cli-review-") as root_text:
             root = Path(root_text)
             repository = root / "repository"
             repository.mkdir()
@@ -293,7 +318,7 @@ class CliTests(unittest.TestCase):
                     "-C",
                     os.fspath(repository),
                     "-c",
-                    "user.name=Token Saver",
+                    "user.name=Model Boss",
                     "-c",
                     "user.email=test@example.invalid",
                     "commit",
@@ -442,7 +467,7 @@ class CliTests(unittest.TestCase):
             self.assertFalse((repository / "reviewer-write").exists())
 
     def test_lite_inline_authority_seals_receipt_without_external_reviewer(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="token-saver-cli-lite-") as root_text:
+        with tempfile.TemporaryDirectory(prefix="model-boss-cli-lite-") as root_text:
             root = Path(root_text)
             repository = root / "repository"
             repository.mkdir()
@@ -453,7 +478,7 @@ class CliTests(unittest.TestCase):
                     "-C",
                     os.fspath(repository),
                     "-c",
-                    "user.name=Token Saver",
+                    "user.name=Model Boss",
                     "-c",
                     "user.email=test@example.invalid",
                     "commit",
@@ -539,7 +564,7 @@ class CliTests(unittest.TestCase):
             self.assertFalse(resources.invocation_root.exists())
 
     def test_cleanup_loads_and_consumes_an_exact_active_manifest(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="token-saver-cli-cleanup-") as root_text:
+        with tempfile.TemporaryDirectory(prefix="model-boss-cli-cleanup-") as root_text:
             root = Path(root_text)
             repository = root / "repository"
             repository.mkdir()
@@ -565,7 +590,7 @@ class CliTests(unittest.TestCase):
     def test_integrate_rejects_caller_supplied_approval_without_consuming_manifest(
         self,
     ) -> None:
-        with tempfile.TemporaryDirectory(prefix="token-saver-cli-approval-") as root_text:
+        with tempfile.TemporaryDirectory(prefix="model-boss-cli-approval-") as root_text:
             root = Path(root_text)
             repository = root / "repository"
             repository.mkdir()
@@ -601,7 +626,7 @@ class CliTests(unittest.TestCase):
             self.skipTest("verified provider workers require macOS or Linux/WSL")
         if sys.platform.startswith("linux") and shutil.which("bwrap") is None:
             self.skipTest("Bubblewrap is unavailable")
-        with tempfile.TemporaryDirectory(prefix="token-saver-cli-worker-") as root_text:
+        with tempfile.TemporaryDirectory(prefix="model-boss-cli-worker-") as root_text:
             root = Path(root_text)
             repository = root / "repository"
             repository.mkdir()
@@ -612,9 +637,9 @@ class CliTests(unittest.TestCase):
             (repository / "tracked.txt").write_text("base\n", encoding="utf-8")
             git_environment = {
                 **os.environ,
-                "GIT_AUTHOR_NAME": "Token Saver",
+                "GIT_AUTHOR_NAME": "Model Boss",
                 "GIT_AUTHOR_EMAIL": "test@example.invalid",
-                "GIT_COMMITTER_NAME": "Token Saver",
+                "GIT_COMMITTER_NAME": "Model Boss",
                 "GIT_COMMITTER_EMAIL": "test@example.invalid",
             }
             subprocess.run(

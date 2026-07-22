@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/vincemakes/token-saver/config/token-saver.schema.json",
-  "title": "Token Saver configuration",
-  "description": "Credential-free, model-independent Token Saver route configuration.",
+  "$id": "https://github.com/vincemakes/model-boss/config/model-boss.schema.json",
+  "title": "Model Boss configuration",
+  "description": "Credential-free, model-independent Model Boss route configuration.",
   "type": "object",
   "additionalProperties": false,
   "required": [

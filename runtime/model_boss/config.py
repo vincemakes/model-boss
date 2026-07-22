@@ -1,4 +1,4 @@
-"""Credential-free configuration loading for Token Saver routes."""
+"""Credential-free configuration loading for Model Boss routes."""
 
 from __future__ import annotations
 
@@ -678,11 +678,11 @@ def discover_user_config_path(
                     "requires an absolute XDG_CONFIG_HOME or HOME",
                 )
             root = home_path / ".config"
-    return root / "token-saver" / "config.json"
+    return root / "model-boss" / "config.json"
 
 
 def discover_project_config_path(repo_root: Path | str) -> Path:
-    return Path(repo_root) / ".token-saver.json"
+    return Path(repo_root) / ".model-boss.json"
 
 
 def _read_json_file(path: Path, source: str) -> dict[str, object]:

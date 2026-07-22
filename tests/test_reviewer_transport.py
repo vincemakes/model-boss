@@ -9,23 +9,23 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.token_saver.evidence import ApprovalBinding
-from runtime.token_saver.models import (
+from runtime.model_boss.evidence import ApprovalBinding
+from runtime.model_boss.models import (
     CapabilityBand,
     ModelFingerprint,
     Role,
     Route,
     Transport,
 )
-from runtime.token_saver.process import ProcessResult, ProcessSpec, run_process
-from runtime.token_saver.sandbox import (
+from runtime.model_boss.process import ProcessResult, ProcessSpec, run_process
+from runtime.model_boss.sandbox import (
     ConformanceProbe,
     SandboxPolicy,
     UnavailableSandbox,
     VerifiedSandbox,
     select_verified_backend,
 )
-from runtime.token_saver.transport import (
+from runtime.model_boss.transport import (
     _resolve_executable,
     _reviewer_runtime_roots,
     execute_reviewer,
@@ -225,7 +225,7 @@ class ReviewerTransportTests(unittest.TestCase):
         assert command is not None
         if not command[0].endswith(".js"):
             self.skipTest("installed Codex launcher is not the Node script layout")
-        with tempfile.TemporaryDirectory(prefix="token-saver-codex-runtime-") as root_text:
+        with tempfile.TemporaryDirectory(prefix="model-boss-codex-runtime-") as root_text:
             root = Path(root_text).resolve(strict=True)
             evidence = root / "evidence"
             state = root / "state"

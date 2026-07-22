@@ -12,8 +12,8 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-import runtime.token_saver.resources as resources_module
-from runtime.token_saver.resources import (
+import runtime.model_boss.resources as resources_module
+from runtime.model_boss.resources import (
     cleanup_invocation,
     create_invocation_resources,
     load_invocation_resources,
@@ -33,8 +33,8 @@ def _create_repository(base: Path) -> Path:
     repository = base / "repository"
     repository.mkdir()
     _git(repository, "init", "-q")
-    _git(repository, "config", "user.name", "Token Saver Tests")
-    _git(repository, "config", "user.email", "token-saver@example.invalid")
+    _git(repository, "config", "user.name", "Model Boss Tests")
+    _git(repository, "config", "user.email", "model-boss@example.invalid")
     _git(repository, "config", "core.autocrlf", "false")
     (repository / "tracked.txt").write_text("baseline\n", encoding="utf-8")
     _git(repository, "add", "tracked.txt")
@@ -238,7 +238,7 @@ class InvocationResourceCreationTests(unittest.TestCase):
             temp_parent.mkdir()
 
             with mock.patch(
-                "runtime.token_saver.resources._write_private_json",
+                "runtime.model_boss.resources._write_private_json",
                 side_effect=OSError("injected manifest failure"),
             ):
                 with self.assertRaisesRegex(OSError, "injected manifest failure"):
@@ -259,11 +259,11 @@ class InvocationResourceCreationTests(unittest.TestCase):
                         create_invocation_resources(repository, unsafe_parent)
 
             self.assertEqual(
-                list(repository.glob("token-saver-invocation-*")),
+                list(repository.glob("model-boss-invocation-*")),
                 [],
             )
             self.assertEqual(
-                list(nested_parent.glob("token-saver-invocation-*")),
+                list(nested_parent.glob("model-boss-invocation-*")),
                 [],
             )
 
@@ -280,7 +280,7 @@ class InvocationResourceCreationTests(unittest.TestCase):
                 create_invocation_resources(repository, temp_parent)
 
             self.assertEqual(
-                list(temp_parent.glob("token-saver-invocation-*")),
+                list(temp_parent.glob("model-boss-invocation-*")),
                 [],
             )
 
@@ -317,7 +317,7 @@ class InvocationResourceCreationTests(unittest.TestCase):
 class InvocationResourceLoadingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(
-            prefix="token-saver-resource-load-test-"
+            prefix="model-boss-resource-load-test-"
         )
         self.base = Path(self.temporary.name)
         self.repository = self.base / "repository"
@@ -652,7 +652,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             return set()
 
         with mock.patch(
-            "runtime.token_saver.resources._registered_worktrees",
+            "runtime.model_boss.resources._registered_worktrees",
             side_effect=swap_root,
         ):
             result = cleanup_invocation(self.resources)
@@ -661,7 +661,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "outside")
         self.assertTrue((original_root / "manifest.json").is_file())
         self.assertEqual(
-            list(self.temp_parent.glob(".token-saver-consumed-*.json")),
+            list(self.temp_parent.glob(".model-boss-consumed-*.json")),
             [],
         )
 
@@ -689,7 +689,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             original_writer(parent_fd, name, value)
             if (
                 not swapped
-                and name.startswith(".token-saver-consumed-")
+                and name.startswith(".model-boss-consumed-")
             ):
                 swapped = True
                 self.resources.invocation_root.rename(original_root)
@@ -698,7 +698,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
                 )
 
         with mock.patch(
-            "runtime.token_saver.resources._write_private_json_at",
+            "runtime.model_boss.resources._write_private_json_at",
             side_effect=write_then_swap,
         ):
             result = cleanup_invocation(self.resources)
@@ -749,7 +749,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             )
 
         with mock.patch(
-            "runtime.token_saver.resources._open_root_anchor",
+            "runtime.model_boss.resources._open_root_anchor",
             side_effect=swap_ancestor_then_open,
         ):
             result = cleanup_invocation(resources)
@@ -794,7 +794,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             original_writer(parent_fd, name, value)
             if (
                 not swapped
-                and name.startswith(".token-saver-consumed-")
+                and name.startswith(".model-boss-consumed-")
             ):
                 swapped = True
                 self.resources.worktree_path.rename(original_worktree)
@@ -811,11 +811,11 @@ class InvocationResourceRefusalTests(unittest.TestCase):
 
         with (
             mock.patch(
-                "runtime.token_saver.resources._write_private_json_at",
+                "runtime.model_boss.resources._write_private_json_at",
                 side_effect=write_then_swap,
             ),
             mock.patch(
-                "runtime.token_saver.resources._run_git",
+                "runtime.model_boss.resources._run_git",
                 side_effect=observe_git,
             ),
         ):
@@ -964,7 +964,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             return subprocess.CompletedProcess(arguments, 0, b"", b"")
 
         with mock.patch(
-            "runtime.token_saver.resources.subprocess.run", side_effect=fake_run
+            "runtime.model_boss.resources.subprocess.run", side_effect=fake_run
         ):
             result = cleanup_invocation(self.resources)
 
@@ -997,7 +997,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
 
     def test_git_probe_failure_does_not_consume_the_active_manifest(self) -> None:
         with mock.patch(
-            "runtime.token_saver.resources._run_git",
+            "runtime.model_boss.resources._run_git",
             side_effect=subprocess.CalledProcessError(1, ["git", "worktree", "list"]),
         ):
             failed = cleanup_invocation(self.resources)
@@ -1005,7 +1005,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
         self.assertEqual(failed.status, "rejected")
         self.assertTrue(self.resources.manifest_path.is_file())
         self.assertEqual(
-            list(self.temp_parent.glob(".token-saver-consumed-*.json")),
+            list(self.temp_parent.glob(".model-boss-consumed-*.json")),
             [],
         )
 
@@ -1038,13 +1038,13 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             raise subprocess.CalledProcessError(1, ["git", *arguments])
 
         with mock.patch(
-            "runtime.token_saver.resources._run_git", side_effect=fail_remove
+            "runtime.model_boss.resources._run_git", side_effect=fail_remove
         ):
             failed = cleanup_invocation(self.resources)
 
         self.assertEqual(failed.status, "rejected")
         self.assertTrue(self.resources.manifest_path.is_file())
-        receipts = list(self.temp_parent.glob(".token-saver-consumed-*.json"))
+        receipts = list(self.temp_parent.glob(".model-boss-consumed-*.json"))
         self.assertEqual(len(receipts), 1)
         self.assertEqual(
             json.loads(receipts[0].read_text(encoding="utf-8"))["state"],
@@ -1078,7 +1078,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
         )
 
         with mock.patch(
-            "runtime.token_saver.resources._remove_owned_directory",
+            "runtime.model_boss.resources._remove_owned_directory",
             side_effect=OSError("injected interruption after git removal"),
         ):
             interrupted = cleanup_invocation(self.resources)
@@ -1089,7 +1089,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             self.resources.worktree_path,
             _registered_worktrees(self.repository),
         )
-        receipts = list(self.temp_parent.glob(".token-saver-consumed-*.json"))
+        receipts = list(self.temp_parent.glob(".model-boss-consumed-*.json"))
         self.assertEqual(len(receipts), 1)
         self.assertEqual(
             json.loads(receipts[0].read_text(encoding="utf-8"))["state"],
@@ -1104,13 +1104,13 @@ class InvocationResourceRefusalTests(unittest.TestCase):
 
     def test_consuming_receipt_resumes_after_interruption_before_deletion(self) -> None:
         with mock.patch(
-            "runtime.token_saver.resources._remove_owned_directory",
+            "runtime.model_boss.resources._remove_owned_directory",
             side_effect=OSError("injected interruption"),
         ):
             interrupted = cleanup_invocation(self.resources)
 
         self.assertEqual(interrupted.status, "rejected")
-        receipts = list(self.temp_parent.glob(".token-saver-consumed-*.json"))
+        receipts = list(self.temp_parent.glob(".model-boss-consumed-*.json"))
         self.assertEqual(len(receipts), 1)
         self.assertEqual(
             json.loads(receipts[0].read_text(encoding="utf-8"))["state"],
@@ -1124,7 +1124,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
 
     def test_claimed_receipt_rejects_a_missing_root_instead_of_consuming(self) -> None:
         with mock.patch(
-            "runtime.token_saver.resources._remove_owned_directory",
+            "runtime.model_boss.resources._remove_owned_directory",
             side_effect=OSError("injected interruption"),
         ):
             interrupted = cleanup_invocation(self.resources)
@@ -1135,7 +1135,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
         resumed = cleanup_invocation(self.resources)
 
         self.assertEqual(resumed.status, "rejected")
-        receipts = list(self.temp_parent.glob(".token-saver-consumed-*.json"))
+        receipts = list(self.temp_parent.glob(".model-boss-consumed-*.json"))
         self.assertEqual(len(receipts), 1)
         self.assertEqual(
             json.loads(receipts[0].read_text(encoding="utf-8"))["state"],
@@ -1145,7 +1145,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
 
     def test_claimed_receipt_rejects_a_same_name_directory_replacement(self) -> None:
         with mock.patch(
-            "runtime.token_saver.resources._remove_owned_directory",
+            "runtime.model_boss.resources._remove_owned_directory",
             side_effect=OSError("injected interruption"),
         ):
             interrupted = cleanup_invocation(self.resources)
@@ -1171,7 +1171,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             evidence_sentinel.read_text(encoding="utf-8"), "evidence"
         )
         self.assertTrue((original_root / "manifest.json").is_file())
-        receipts = list(self.temp_parent.glob(".token-saver-consumed-*.json"))
+        receipts = list(self.temp_parent.glob(".model-boss-consumed-*.json"))
         self.assertEqual(len(receipts), 1)
         self.assertEqual(
             json.loads(receipts[0].read_text(encoding="utf-8"))["state"],
@@ -1191,14 +1191,14 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             return original_unlink(path, *arguments, **options)
 
         with mock.patch(
-            "runtime.token_saver.resources.os.unlink",
+            "runtime.model_boss.resources.os.unlink",
             side_effect=fail_second_marker,
         ):
             interrupted = cleanup_invocation(self.resources)
 
         self.assertEqual(interrupted.status, "rejected")
         self.assertFalse(self.resources.marker_paths[0].exists())
-        receipts = list(self.temp_parent.glob(".token-saver-consumed-*.json"))
+        receipts = list(self.temp_parent.glob(".model-boss-consumed-*.json"))
         self.assertEqual(len(receipts), 1)
         self.assertEqual(
             json.loads(receipts[0].read_text(encoding="utf-8"))["state"],
@@ -1210,14 +1210,14 @@ class InvocationResourceRefusalTests(unittest.TestCase):
 
     def test_consuming_receipt_resumes_when_final_transition_failed(self) -> None:
         with mock.patch(
-            "runtime.token_saver.resources._finish_consumption_receipt",
+            "runtime.model_boss.resources._finish_consumption_receipt",
             side_effect=OSError("injected final transition failure"),
         ):
             interrupted = cleanup_invocation(self.resources)
 
         self.assertEqual(interrupted.status, "rejected")
         self.assertFalse(self.resources.manifest_path.exists())
-        receipts = list(self.temp_parent.glob(".token-saver-consumed-*.json"))
+        receipts = list(self.temp_parent.glob(".model-boss-consumed-*.json"))
         self.assertEqual(len(receipts), 1)
         self.assertEqual(
             json.loads(receipts[0].read_text(encoding="utf-8"))["state"],
@@ -1243,7 +1243,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             return original_replace(source, destination, *arguments, **options)
 
         with mock.patch(
-            "runtime.token_saver.resources.os.replace",
+            "runtime.model_boss.resources.os.replace",
             side_effect=fail_first_receipt_replace,
         ):
             interrupted = cleanup_invocation(self.resources)
@@ -1253,7 +1253,7 @@ class InvocationResourceRefusalTests(unittest.TestCase):
             len(
                 list(
                     self.temp_parent.glob(
-                        ".token-saver-consumed-complete-*.json"
+                        ".model-boss-consumed-complete-*.json"
                     )
                 )
             ),

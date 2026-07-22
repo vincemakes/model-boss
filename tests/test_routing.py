@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import fields, replace
 
-from runtime.token_saver.models import (
+from runtime.model_boss.models import (
     CapabilityBand,
     CredentialBinding,
     FingerprintEvidenceSource,
@@ -23,7 +23,7 @@ from runtime.token_saver.models import (
     Transport,
     WorkerSandboxIdentity,
 )
-from runtime.token_saver.routing import (
+from runtime.model_boss.routing import (
     RouteProbeResult,
     canonical_fingerprint,
     finalize_resolution,

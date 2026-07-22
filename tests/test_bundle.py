@@ -12,8 +12,8 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-import runtime.token_saver.bundle as bundle_module
-from runtime.token_saver.bundle import (
+import runtime.model_boss.bundle as bundle_module
+from runtime.model_boss.bundle import (
     BundleAlreadySealedError,
     BundleError,
     BundleTooLargeError,
@@ -26,7 +26,7 @@ from runtime.token_saver.bundle import (
     seal_delta_bundle,
     seal_final_review_receipt,
 )
-from runtime.token_saver.evidence import (
+from runtime.model_boss.evidence import (
     ApprovalBinding,
     EvidenceRecord,
     MODE_ABSENT,
@@ -43,14 +43,14 @@ from runtime.token_saver.evidence import (
     encode_source_snapshot,
     encode_worker_delta,
 )
-from runtime.token_saver.repository import project_task_patch
-from runtime.token_saver.repository import (
+from runtime.model_boss.repository import project_task_patch
+from runtime.model_boss.repository import (
     capture_source_snapshot,
     capture_worker_delta,
     create_worktree,
     materialize_snapshot,
 )
-from runtime.token_saver.resources import create_invocation_resources
+from runtime.model_boss.resources import create_invocation_resources
 
 
 def _digest(value: bytes) -> str:
@@ -182,12 +182,12 @@ class BundleTestCase(unittest.TestCase):
         repository = base / "repository"
         repository.mkdir()
         _git(repository, b"init", b"-q")
-        _git(repository, b"config", b"user.name", b"Token Saver Tests")
+        _git(repository, b"config", b"user.name", b"Model Boss Tests")
         _git(
             repository,
             b"config",
             b"user.email",
-            b"token-saver@example.invalid",
+            b"model-boss@example.invalid",
         )
         _git(repository, b"config", b"core.autocrlf", b"false")
         temporary_parent = base / "invocations"

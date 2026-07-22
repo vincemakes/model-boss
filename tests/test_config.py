@@ -7,7 +7,7 @@ import unittest
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
-from runtime.token_saver.config import (
+from runtime.model_boss.config import (
     ConfigError,
     discover_project_config_path,
     discover_user_config_path,
@@ -15,7 +15,7 @@ from runtime.token_saver.config import (
     load_config_layers,
     load_profile_data,
 )
-from runtime.token_saver.models import (
+from runtime.model_boss.models import (
     CapabilityBand,
     CredentialBinding,
     LoadedConfig,
@@ -773,7 +773,7 @@ class ConfigMergeTests(unittest.TestCase):
         self.assertEqual(loaded.preference_provenance.scouts.source, "project")
 
     def test_mode_provenance_tracks_config_and_run_override(self) -> None:
-        project_path = Path("/repo/.token-saver.json")
+        project_path = Path("/repo/.model-boss.json")
         configured = load_config_layers(
             profile=_base_profile(),
             project=_layer(mode="max"),
@@ -805,11 +805,11 @@ class ConfigDiscoveryTests(unittest.TestCase):
             discover_user_config_path(
                 {"XDG_CONFIG_HOME": "/xdg/config", "HOME": "/ignored/home"}
             ),
-            Path("/xdg/config/token-saver/config.json"),
+            Path("/xdg/config/model-boss/config.json"),
         )
         self.assertEqual(
             discover_user_config_path({"HOME": "/chosen/home"}),
-            Path("/chosen/home/.config/token-saver/config.json"),
+            Path("/chosen/home/.config/model-boss/config.json"),
         )
         self.assertEqual(os.environ.get("HOME"), process_home)
 
@@ -818,7 +818,7 @@ class ConfigDiscoveryTests(unittest.TestCase):
             discover_user_config_path(
                 {"XDG_CONFIG_HOME": "relative/xdg", "HOME": "/absolute/home"}
             ),
-            Path("/absolute/home/.config/token-saver/config.json"),
+            Path("/absolute/home/.config/model-boss/config.json"),
         )
 
     def test_discovery_rejects_relative_or_missing_environment_roots(self) -> None:
@@ -835,10 +835,10 @@ class ConfigDiscoveryTests(unittest.TestCase):
                     self.assertNotIn(value, message)
                 self.assertIsNone(raised.exception.__cause__)
 
-    def test_project_path_is_root_dot_token_saver_json(self) -> None:
+    def test_project_path_is_root_dot_model_boss_json(self) -> None:
         self.assertEqual(
             discover_project_config_path(Path("/work/repository")),
-            Path("/work/repository/.token-saver.json"),
+            Path("/work/repository/.model-boss.json"),
         )
 
     def test_load_config_discovers_xdg_and_project_layers(self) -> None:
@@ -848,11 +848,11 @@ class ConfigDiscoveryTests(unittest.TestCase):
             repo = root / "repo"
             repo.mkdir()
             self.write_json(
-                xdg / "token-saver" / "config.json",
+                xdg / "model-boss" / "config.json",
                 _layer(mode="lite", preferences={"workers": ["worker"]}),
             )
             self.write_json(
-                repo / ".token-saver.json",
+                repo / ".model-boss.json",
                 _layer(mode="max", preferences={"reviewers": ["review"]}),
             )
             loaded = load_config(
@@ -865,6 +865,27 @@ class ConfigDiscoveryTests(unittest.TestCase):
             self.assertEqual(loaded.preferences.workers, ("worker",))
             self.assertEqual(loaded.preference_provenance.workers.source, "user")
             self.assertEqual(loaded.preference_provenance.reviewers.source, "project")
+
+    def test_discovery_ignores_legacy_json_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            xdg = root / "xdg"
+            repo = root / "repo"
+            repo.mkdir()
+            self.write_json(
+                xdg / "token-saver" / "config.json",
+                _layer(mode="lite"),
+            )
+            self.write_json(repo / ".token-saver.json", _layer(mode="max"))
+
+            loaded = load_config(
+                profile=_base_profile(),
+                repo_root=repo,
+                environ={"XDG_CONFIG_HOME": str(xdg), "HOME": str(root / "home")},
+            )
+
+            self.assertEqual(loaded.mode, Mode.AUTO)
+            self.assertEqual(loaded.mode_provenance.source, "profile")
 
     def test_explicit_layer_inputs_do_not_require_discovery_environment(self) -> None:
         loaded = load_config(

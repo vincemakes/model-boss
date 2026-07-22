@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from runtime.token_saver import repository as repository_module
-from runtime.token_saver.evidence import (
+from runtime.model_boss import repository as repository_module
+from runtime.model_boss.evidence import (
     RecordStatus,
     RecordTag,
     WorkerDelta,
@@ -17,7 +17,7 @@ from runtime.token_saver.evidence import (
     encode_source_snapshot,
     encode_worker_delta,
 )
-from runtime.token_saver.repository import (
+from runtime.model_boss.repository import (
     RepositoryError,
     ScopeViolationError,
     capture_destination,
@@ -35,10 +35,10 @@ GIT_ENV = {
     "LANG": "C",
     "GIT_CONFIG_NOSYSTEM": "1",
     "GIT_CONFIG_GLOBAL": os.devnull,
-    "GIT_AUTHOR_NAME": "Token Saver Test",
-    "GIT_AUTHOR_EMAIL": "token-saver@example.invalid",
-    "GIT_COMMITTER_NAME": "Token Saver Test",
-    "GIT_COMMITTER_EMAIL": "token-saver@example.invalid",
+    "GIT_AUTHOR_NAME": "Model Boss Test",
+    "GIT_AUTHOR_EMAIL": "model-boss@example.invalid",
+    "GIT_COMMITTER_NAME": "Model Boss Test",
+    "GIT_COMMITTER_EMAIL": "model-boss@example.invalid",
 }
 
 

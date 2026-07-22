@@ -1,4 +1,4 @@
-"""Immutable data contracts for model-independent Token Saver routing."""
+"""Immutable data contracts for model-independent Model Boss routing."""
 
 from __future__ import annotations
 

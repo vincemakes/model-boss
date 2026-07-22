@@ -32,7 +32,7 @@ _MARKER_NAMES = (
 
 @dataclass(frozen=True)
 class InvocationResources:
-    """Exact paths owned by one Token Saver invocation."""
+    """Exact paths owned by one Model Boss invocation."""
 
     invocation_id: str
     repository_path: Path
@@ -150,7 +150,7 @@ def create_invocation_resources(
     parent_metadata = os.stat(resolved_parent, follow_symlinks=False)
 
     invocation_id = str(uuid.uuid4())
-    invocation_root = resolved_parent / f"token-saver-invocation-{invocation_id}"
+    invocation_root = resolved_parent / f"model-boss-invocation-{invocation_id}"
     root_created = False
     try:
         invocation_root.mkdir(mode=0o700)
@@ -822,7 +822,7 @@ def _validate_recorded_paths(resources: InvocationResources) -> None:
         raise ValueError("the source repository is never an owned worktree")
 
     expected_root = resources.temp_parent / (
-        f"token-saver-invocation-{resources.invocation_id}"
+        f"model-boss-invocation-{resources.invocation_id}"
     )
     expected_paths = {
         "invocation_root": expected_root,
@@ -970,19 +970,19 @@ def _validate_active_resources(
 
 def _consumed_manifest_path(resources: InvocationResources) -> Path:
     return resources.temp_parent / (
-        f".token-saver-consumed-{resources.invocation_id}.json"
+        f".model-boss-consumed-{resources.invocation_id}.json"
     )
 
 
 def _seal_receipt_path(resources: InvocationResources) -> Path:
     return resources.temp_parent / (
-        f".token-saver-sealed-{resources.invocation_id}.json"
+        f".model-boss-sealed-{resources.invocation_id}.json"
     )
 
 
 def _seal_receipt_final_path(resources: InvocationResources) -> Path:
     return resources.temp_parent / (
-        f".token-saver-sealed-final-{resources.invocation_id}.json"
+        f".model-boss-sealed-final-{resources.invocation_id}.json"
     )
 
 
@@ -1094,7 +1094,7 @@ def _replace_consumption_receipt(
     _require_parent_current(parent_fd, resources)
     consumed_name = _consumed_manifest_name(resources)
     completed_name = (
-        f".token-saver-consumed-{temporary_label}-{resources.invocation_id}.json"
+        f".model-boss-consumed-{temporary_label}-{resources.invocation_id}.json"
     )
     completed_receipt = _consumption_receipt(resources, state, phase)
     try:

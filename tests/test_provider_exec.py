@@ -9,10 +9,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.token_saver.cli import prepare_provider_exec
-from runtime.token_saver.models import Status
-from runtime.token_saver.resources import create_invocation_resources
-from runtime.token_saver.sandbox import (
+from runtime.model_boss.cli import prepare_provider_exec
+from runtime.model_boss.models import Status
+from runtime.model_boss.resources import create_invocation_resources
+from runtime.model_boss.sandbox import (
     ConformanceProbe,
     UnavailableSandbox,
     VerifiedSandbox,
@@ -31,9 +31,9 @@ def _git(repository: Path, *arguments: str) -> None:
             "LC_ALL": "C",
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_AUTHOR_NAME": "Token Saver",
+            "GIT_AUTHOR_NAME": "Model Boss",
             "GIT_AUTHOR_EMAIL": "test@example.invalid",
-            "GIT_COMMITTER_NAME": "Token Saver",
+            "GIT_COMMITTER_NAME": "Model Boss",
             "GIT_COMMITTER_EMAIL": "test@example.invalid",
         },
     )
@@ -42,7 +42,7 @@ def _git(repository: Path, *arguments: str) -> None:
 class ProviderExecTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(
-            prefix="token-saver-provider-exec-test-"
+            prefix="model-boss-provider-exec-test-"
         )
         self.base = Path(self.temporary.name)
         self.repository = self.base / "repository"
@@ -73,7 +73,7 @@ class ProviderExecTests(unittest.TestCase):
             "HOME": os.fspath(self.base / "unused-home"),
             "LANG": "C",
             "LC_ALL": "C",
-            "TOKEN_SAVER_INVOCATION_MANIFEST": os.fspath(
+            "MODEL_BOSS_INVOCATION_MANIFEST": os.fspath(
                 self.resources.manifest_path
             ),
             "KIMI_BASE_URL": "https://kimi.invalid/",
@@ -112,7 +112,10 @@ class ProviderExecTests(unittest.TestCase):
 
     def test_sandboxed_worker_requires_a_sealed_manifest(self) -> None:
         environment = dict(self.environment)
-        environment.pop("TOKEN_SAVER_INVOCATION_MANIFEST")
+        environment.pop("MODEL_BOSS_INVOCATION_MANIFEST")
+        environment["TOKEN_SAVER_INVOCATION_MANIFEST"] = os.fspath(
+            self.resources.manifest_path
+        )
 
         plan = prepare_provider_exec(
             "kimi",
@@ -142,7 +145,7 @@ class ProviderExecTests(unittest.TestCase):
         self.assertEqual(plan.executable, self.provider.resolve())
         self.assertEqual(plan.cwd, self.repository.resolve())
         self.assertNotIn("--dangerously-skip-permissions", plan.argv)
-        self.assertNotIn("TOKEN_SAVER_INVOCATION_MANIFEST", plan.environment)
+        self.assertNotIn("MODEL_BOSS_INVOCATION_MANIFEST", plan.environment)
         self.assertNotIn("UNRELATED_SECRET", plan.environment)
 
     def test_safe_wrapper_refuses_every_user_supplied_bypass_form(self) -> None:
@@ -243,7 +246,7 @@ class ProviderExecTests(unittest.TestCase):
         self.assertEqual(plan.environment["ANTHROPIC_AUTH_TOKEN"], "secret-value")
         self.assertEqual(plan.environment["ANTHROPIC_BASE_URL"], "https://kimi.invalid/")
         self.assertNotIn("KIMI_AUTH_TOKEN", plan.environment)
-        self.assertNotIn("TOKEN_SAVER_INVOCATION_MANIFEST", plan.environment)
+        self.assertNotIn("MODEL_BOSS_INVOCATION_MANIFEST", plan.environment)
         self.assertNotIn("UNRELATED_SECRET", plan.environment)
         self.assertTrue(Path(plan.environment["HOME"]).is_dir())
         self.assertNotEqual(Path(plan.environment["HOME"]), Path(self.environment["HOME"]))

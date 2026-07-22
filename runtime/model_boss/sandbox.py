@@ -38,8 +38,8 @@ import os
 import sys
 
 allowed_path, protected_path, protected_kind, inside_path, outside_path = sys.argv[1:6]
-expected = b"token-saver-allowed-read-v1"
-inside_payload = b"token-saver-inside-write-v1"
+expected = b"model-boss-allowed-read-v1"
+inside_payload = b"model-boss-inside-write-v1"
 
 try:
     with open(allowed_path, "rb") as stream:
@@ -1027,10 +1027,10 @@ def _run_conformance_probe(
     probe_parent: Path | None = None,
 ) -> ConformanceProbe:
     nonce = uuid.uuid4().hex
-    allowed_path = policy.worktree_root / f".token-saver-probe-{nonce}.read"
-    inside_path = policy.worktree_root / f".token-saver-probe-{nonce}.write"
-    allowed_payload = b"token-saver-allowed-read-v1"
-    inside_payload = b"token-saver-inside-write-v1"
+    allowed_path = policy.worktree_root / f".model-boss-probe-{nonce}.read"
+    inside_path = policy.worktree_root / f".model-boss-probe-{nonce}.write"
+    allowed_payload = b"model-boss-allowed-read-v1"
+    inside_payload = b"model-boss-inside-write-v1"
     _write_probe_fixture(allowed_path, allowed_payload)
     try:
         resolved_probe_parent = None
@@ -1052,7 +1052,7 @@ def _run_conformance_probe(
             ):
                 return ConformanceProbe(False, False, False, False, False)
         with tempfile.TemporaryDirectory(
-            prefix="token-saver-outside-probe-",
+            prefix="model-boss-outside-probe-",
             dir=resolved_probe_parent,
         ) as root:
             outside_root = Path(root).resolve(strict=True)
@@ -1169,7 +1169,7 @@ def select_verified_backend(
     """Run a real conformance probe and bind its backend to one exact route.
 
     The supplied route argv is only normalized and hashed here.  The probe uses a
-    fixed Token Saver helper, so the external worker cannot start before all four
+    fixed Model Boss helper, so the external worker cannot start before all four
     filesystem checks have passed.
     """
 

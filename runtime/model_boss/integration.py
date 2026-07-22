@@ -212,7 +212,7 @@ def _run_apply(repo: Path, patch: bytes) -> bool:
 def _render_untracked_patch(record: EvidenceRecord) -> bytes:
     if record.content is None:
         raise ValueError("content-backed worker record is missing content")
-    with tempfile.TemporaryDirectory(prefix="token-saver-untracked-patch-") as root:
+    with tempfile.TemporaryDirectory(prefix="model-boss-untracked-patch-") as root:
         root_path = Path(root)
         relative_path = Path(os.fsdecode(record.path))
         destination = root_path / relative_path
@@ -646,7 +646,7 @@ def _simulate_projected_patch_hash(
 ) -> tuple[str, tuple[tuple[bytes, bytes], ...]]:
     """Derive the reviewed result from delta records without trusting its cache."""
 
-    with tempfile.TemporaryDirectory(prefix="token-saver-integration-check-") as root:
+    with tempfile.TemporaryDirectory(prefix="model-boss-integration-check-") as root:
         worktree_path = Path(root) / "worktree"
         handle = None
         primary_error: BaseException | None = None

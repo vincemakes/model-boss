@@ -6,18 +6,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.token_saver.process import ProcessSpec, run_process
+from runtime.model_boss.process import ProcessSpec, run_process
 
 
 class ProcessRunnerTests(unittest.TestCase):
     def test_exact_argv_stdin_and_clean_environment(self) -> None:
         with tempfile.TemporaryDirectory() as root:
-            os.environ["TOKEN_SAVER_PARENT_SENTINEL"] = "must-not-leak"
+            os.environ["MODEL_BOSS_PARENT_SENTINEL"] = "must-not-leak"
             code = (
                 "import json,os,sys; "
                 "print(json.dumps({'argv':sys.argv[1:],"
                 "'stdin':sys.stdin.buffer.read().decode(),"
-                "'sentinel':os.getenv('TOKEN_SAVER_PARENT_SENTINEL')}))"
+                "'sentinel':os.getenv('MODEL_BOSS_PARENT_SENTINEL')}))"
             )
             spec = ProcessSpec(
                 argv=(sys.executable, "-c", code, "space value", "$(literal)", ";"),

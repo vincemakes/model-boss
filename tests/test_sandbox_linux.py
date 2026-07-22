@@ -8,8 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.token_saver.models import Status
-from runtime.token_saver.sandbox import SandboxPolicy, VerifiedSandbox, select_verified_backend
+from runtime.model_boss.models import Status
+from runtime.model_boss.sandbox import SandboxPolicy, VerifiedSandbox, select_verified_backend
 
 
 _BWRAP = shutil.which("bwrap")
@@ -22,7 +22,7 @@ _BWRAP = shutil.which("bwrap")
 class LinuxSandboxConformanceTests(unittest.TestCase):
     def test_real_probe_passes_every_boundary_before_route_can_launch(self) -> None:
         assert _BWRAP is not None
-        with tempfile.TemporaryDirectory(prefix="token-saver-linux-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="model-boss-linux-") as temporary:
             root = Path(temporary).resolve()
             worktree = root / "worktree"
             state = root / "state"

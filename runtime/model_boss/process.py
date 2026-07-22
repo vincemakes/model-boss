@@ -1,4 +1,4 @@
-"""Bounded direct-argv process execution for Token Saver transports."""
+"""Bounded direct-argv process execution for Model Boss transports."""
 
 from __future__ import annotations
 
@@ -114,7 +114,7 @@ class ProcessResult:
         try:
             status = Status(self.status)
         except (TypeError, ValueError) as exc:
-            raise ValueError("status must be a Token Saver status") from exc
+            raise ValueError("status must be a Model Boss status") from exc
         if type(self.stdout) is not bytes or type(self.stderr) is not bytes:
             raise ValueError("process output must be bytes")
         if self.returncode is not None and (

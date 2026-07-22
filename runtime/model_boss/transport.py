@@ -76,7 +76,7 @@ class ReviewerTransportResult:
         try:
             status = Status(self.status)
         except (TypeError, ValueError) as exc:
-            raise ValueError("status must be a Token Saver status") from exc
+            raise ValueError("status must be a Model Boss status") from exc
         if status is Status.OK and not isinstance(self.verdict, ReviewerVerdict):
             raise ValueError("successful reviewer transport requires a verdict")
         if status is not Status.OK and self.verdict is not None:
@@ -434,7 +434,7 @@ def execute_reviewer(
     ):
         return _failure("reviewer roots are invalid")
 
-    root = Path(tempfile.mkdtemp(prefix="token-saver-review-", dir=parent))
+    root = Path(tempfile.mkdtemp(prefix="model-boss-review-", dir=parent))
     evidence = root / "evidence"
     try:
         evidence.mkdir(mode=0o700)
@@ -681,7 +681,7 @@ def probe_route(
             configured_credentials=configured,
             missing_credentials=missing,
         )
-    state = Path(tempfile.mkdtemp(prefix="token-saver-route-probe-"))
+    state = Path(tempfile.mkdtemp(prefix="model-boss-route-probe-"))
     try:
         executable_available = True
         fingerprint = None

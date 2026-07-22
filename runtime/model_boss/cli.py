@@ -1,4 +1,4 @@
-"""Worker orchestration and machine-readable Token Saver command line interface."""
+"""Worker orchestration and machine-readable Model Boss command line interface."""
 
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ _COMMAND_HELP = {
     "worker": "run an OS-sandboxed external worker and seal its delta",
     "snapshot": "print a redacted diagnostic source-snapshot hash without persisting it",
     "integrate": "integrate one sealed delta only with its sealed final-review receipt",
-    "validate-config": "validate one Token Saver configuration file",
+    "validate-config": "validate one Model Boss configuration file",
     "setup-providers": "migrate provider data and optionally install compatibility wrappers",
     "provider-exec": "internal direct-argv provider wrapper entry",
     "cleanup": "consume and remove one abandoned invocation",
@@ -371,7 +371,7 @@ def _retry_packet(prompt: bytes, evidence: Sequence[GateEvidence]) -> bytes:
         }
         for item in evidence
     ]
-    return prompt + b"\n\nTOKEN_SAVER_TRUSTED_GATE_FAILURES=" + json.dumps(
+    return prompt + b"\n\nMODEL_BOSS_TRUSTED_GATE_FAILURES=" + json.dumps(
         failures,
         sort_keys=True,
         separators=(",", ":"),
@@ -1072,7 +1072,7 @@ def _run_review_command(arguments: argparse.Namespace) -> int:
             return _status_exit_code(resolution.status)
 
         with tempfile.TemporaryDirectory(
-            prefix="token-saver-review-run-",
+            prefix="model-boss-review-run-",
             dir=temp_parent,
         ) as root_text:
             root = Path(root_text).resolve(strict=True)
@@ -1340,13 +1340,13 @@ def _run_provider_worker_command(arguments: argparse.Namespace) -> int:
                 "GLM_SMALL_FAST_MODEL",
             ):
                 environment.pop(name, None)
-            environment["TOKEN_SAVER_CREDENTIALS"] = os.fspath(credential_path)
+            environment["MODEL_BOSS_CREDENTIALS"] = os.fspath(credential_path)
 
         resources = create_invocation_resources(repository, temp_parent)
         snapshot = capture_source_snapshot(repository, allowed_paths)
         handle = create_worktree(repository, snapshot, resources.worktree_path)
         materialize_snapshot(handle, snapshot)
-        environment["TOKEN_SAVER_INVOCATION_MANIFEST"] = os.fspath(
+        environment["MODEL_BOSS_INVOCATION_MANIFEST"] = os.fspath(
             resources.manifest_path
         )
         plan = prepare_provider_exec(
@@ -1492,7 +1492,7 @@ def _provider_failure(status: Status, message: str) -> ProviderExecPlan:
 
 
 def _provider_credentials_path(environment: Mapping[str, str]) -> Path:
-    override = environment.get("TOKEN_SAVER_CREDENTIALS")
+    override = environment.get("MODEL_BOSS_CREDENTIALS")
     if override:
         candidate = Path(override)
         if not candidate.is_absolute():
@@ -1508,7 +1508,7 @@ def _provider_credentials_path(environment: Mapping[str, str]) -> Path:
         if xdg_value and Path(xdg_value).is_absolute()
         else home / ".config"
     )
-    return config_root / "token-saver" / "credentials.json"
+    return config_root / "model-boss" / "credentials.json"
 
 
 def _provider_credentials(
@@ -1670,7 +1670,7 @@ def _isolated_git_environment(
                 "--git-dir",
                 os.fspath(git_dir),
                 "update-ref",
-                "refs/heads/token-saver-worker",
+                "refs/heads/model-boss-worker",
                 baseline.decode("ascii"),
             ),
             cwd=state,
@@ -1681,7 +1681,7 @@ def _isolated_git_environment(
                 os.fspath(git_dir),
                 "symbolic-ref",
                 "HEAD",
-                "refs/heads/token-saver-worker",
+                "refs/heads/model-boss-worker",
             ),
             cwd=state,
         )
@@ -1747,7 +1747,7 @@ def prepare_provider_exec(
         )
 
     if policy == "sandboxed-worker":
-        manifest_value = source_environment.get("TOKEN_SAVER_INVOCATION_MANIFEST")
+        manifest_value = source_environment.get("MODEL_BOSS_INVOCATION_MANIFEST")
         if not manifest_value or not Path(manifest_value).is_absolute():
             return _provider_failure(
                 Status.SANDBOX_UNAVAILABLE,
@@ -1908,8 +1908,8 @@ def prepare_provider_exec(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="token-saver-route",
-        description="Model-independent Token Saver routing and sealed evidence tools.",
+        prog="model-boss",
+        description="Model-independent Model Boss routing and sealed evidence tools.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name in _COMMANDS:
@@ -2016,7 +2016,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             xdg = os.environ.get("XDG_CONFIG_HOME")
             config_root = Path(xdg) if xdg and Path(xdg).is_absolute() else home / ".config"
-            credential_path = config_root / "token-saver" / "credentials.json"
+            credential_path = config_root / "model-boss" / "credentials.json"
         try:
             migration_requested = (
                 arguments.legacy_source is not None
@@ -2034,7 +2034,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             else:
                 raise SetupError("no provider setup action is available")
             if arguments.install_path:
-                runner = Path(__file__).resolve().parents[2] / "scripts" / "token-saver-route.py"
+                runner = Path(__file__).resolve().parents[2] / "scripts" / "model-boss.py"
                 install_provider_wrappers(runner, Path(arguments.install_path))
         except (OSError, SetupError, ValueError):
             print(_json_output(Status.NEEDS_CONTEXT, message="provider setup failed safely"))

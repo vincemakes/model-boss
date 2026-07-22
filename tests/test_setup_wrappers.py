@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.token_saver.setup import (
+from runtime.model_boss.setup import (
     WRAPPER_SPECS,
     SetupError,
     install_provider_wrappers,

@@ -32,7 +32,7 @@
       "credential_env": [
         {
           "child_name": "PROVIDER_API_KEY",
-          "source_name": "TOKEN_SAVER_PROVIDER_API_KEY"
+          "source_name": "MODEL_BOSS_PROVIDER_API_KEY"
         }
       ]
     }

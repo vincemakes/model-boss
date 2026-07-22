@@ -7,12 +7,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from runtime.token_saver.setup import SetupError, migrate_legacy_credentials, parse_legacy_env
+from runtime.model_boss.setup import SetupError, migrate_legacy_credentials, parse_legacy_env
 
 
 class LegacyParserTests(unittest.TestCase):
     def test_hostile_values_remain_literal_data(self) -> None:
-        sentinel = Path(tempfile.gettempdir()) / "token-saver-parser-must-not-create"
+        sentinel = Path(tempfile.gettempdir()) / "model-boss-parser-must-not-create"
         try:
             sentinel.unlink()
         except FileNotFoundError:
@@ -60,7 +60,7 @@ class CredentialMigrationTests(unittest.TestCase):
             source.chmod(0o640)
             config_root = root / "config"
             config_root.mkdir()
-            destination = config_root / "token-saver" / "credentials.json"
+            destination = config_root / "model-boss" / "credentials.json"
 
             first = migrate_legacy_credentials(source, destination)
             second = migrate_legacy_credentials(source, destination)
@@ -80,7 +80,7 @@ class CredentialMigrationTests(unittest.TestCase):
             root = Path(root_text)
             source = root / "providers.env"
             source.write_bytes(b"KIMI_AUTH_TOKEN=new\n")
-            parent = root / "token-saver"
+            parent = root / "model-boss"
             parent.mkdir()
             destination = parent / "credentials.json"
             destination.write_bytes(b"existing")
