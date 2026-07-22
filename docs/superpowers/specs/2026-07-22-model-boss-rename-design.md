@@ -95,8 +95,9 @@ This is a clean product rename, not a permanent dual-brand release.
 
 - Active commands, installation examples, generated files, and package contents use
   only `model-boss`.
-- The former names `token-saver` and `fable-token-saver` may remain only in an explicit
-  migration note, skill trigger wording for users asking to migrate, Git history, or
+- The former names `token-saver` and `fable-token-saver` may remain only in the explicit
+  migration and provenance allowlist below: migration notes and triggers, the narrow
+  credential-migration implementation, immutable design history, Git history, and
   dated benchmark provenance where changing the label would falsify the record.
 - No duplicate Python package or long-lived legacy CLI shim is shipped. The migration
   note provides the old-to-new command, config, and installation-path mapping.
@@ -148,9 +149,12 @@ host-selected and immutable.
 The social card is regenerated at `1774 × 887` around the Model Boss name and the
 Lite/Max hierarchy. It must avoid provider-specific branding, show the product name and
 primary slogan without text artifacts, and remain legible when inspected at a
-`600 × 300` thumbnail. The repository description and topics use the new identity.
-The committed card is also uploaded as the GitHub social preview through the
-authenticated repository settings before release is declared complete.
+`600 × 300` thumbnail. The GitHub repository description is exactly **“Big models
+think. Small models ship. Cross-model coding orchestration for Claude Code and
+Codex.”** Its topics are `ai-agents`, `claude-code`, `codex`, `developer-tools`,
+`model-orchestration`, and `multi-model`. The committed card is also uploaded as the
+GitHub social preview through the authenticated repository settings before release is
+declared complete.
 
 ## Verification and release
 
