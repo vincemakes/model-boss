@@ -1,57 +1,66 @@
-# 开发笔记(v0.1.0 重命名前存档)
+# Model Boss 开发笔记
 
-> **重命名前存档 / pre-rename archive:** 本文保留 2026-07 的原始
-> `fable-token-saver` 路径、命令和模型叙事,仅用于复现实验,不是 Token Saver v2
-> 的现行操作文档。当前仓库是
-> <https://github.com/vincemakes/token-saver>。
+Model Boss 是 Claude Code 与 Codex 共用的跨模型编程编排工作流。宿主已选定的主循环是不可替换的输入；Lite 在主循环内 inline 持有权威，Max 由独立且已验证的 Reviewer 持有权威。当前仓库是 <https://github.com/vincemakes/model-boss>。
 
-> 本项目从 idea 到发布在一个 Claude Code session 内完成(2026-07-02 ~ 07-03,Fable 5 主循环)。
-> 本文是该 session 的知识存档:目录地图、复现方法、实测结论、踩坑记录、后续方向。
+## 当前开发地图
 
-## 目录地图
+- 工作流协议：[`SKILL.md`](../SKILL.md)、[`references/protocol.md`](../references/protocol.md)、[`references/routing.md`](../references/routing.md)。
+- 运行时：`runtime/model_boss/`；CLI 入口：`python3 scripts/model-boss.py`。
+- 配置：[`config/model-boss.example.json`](../config/model-boss.example.json) 与 [`config/model-boss.schema.json`](../config/model-boss.schema.json)；项目级文件为 `.model-boss.json`。
+- 用户级自动发现：`${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/config.json` 与 `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/credentials.json`。
+- 打包命令：`bash scripts/package-skill.sh`；标准产物：`dist/model-boss.skill`。
+- 验证命令：`bash scripts/validate.sh` 与 `python3 -m unittest discover -s tests -v`。
 
-| 位置 | 内容 |
+## 评测与安全维护
+
+历史数字仅是 2026 年 Claude/Fable/Opus 参考栈的单次观察，不能推导 Sol、Kimi 或未来 Profile。完整方法、原始数字、负面结果与限制见 [`BENCHMARKS.zh-CN.md`](../BENCHMARKS.zh-CN.md)。复现时每组条件应使用独立进程和全新 fixture，保留 CLI JSON 中的 `modelUsage`，并将盲测集隔离到运行结束后再注入。
+
+维护时不得改变密封证据、三哈希审批绑定、一次性 worktree、经验证的 OS 沙箱、Max 评审身份分离以及 fail-closed 状态语义。外部 Provider 二进制仍是信任边界：工具 allowlist 和文件系统沙箱不是网络安全边界。
+
+## 从 Token Saver 迁移
+
+本项目在 2026-07 更名。历史 `fable-token-saver` 工作区与 v0.1.0 评测数据记录了小任务负收益、大型 Lite/Max 构建、单次盲测 bug-hunt，以及主循环身份自判不可靠等早期经验。这些只是历史与复现上下文，不是当前操作说明。
+
+| 旧表面 | Model Boss 表面 |
 |---|---|
-| `~/Desktop/devv/fable-token-saver` | 历史评测工作区路径(不是现行仓库安装说明) |
-| `~/.claude/skills/fable-token-saver` | 历史 v0.1.0 本地安装路径,仅用于复现旧运行 |
-| `~/.claude/skills/fable-token-saver-workspace/` | **评测数据全在这(不在 git 里,删 session 不影响)**:iteration-1(小任务×3×2)、iteration-2(大任务×2)、iteration-3(max 档 opus/sonnet)、iteration-4(埋雷调试赛)、各 run-iteration-*.sh、fixture-template、grade_mechanical.py 等 |
-| `benchmarks/`(本仓库) | benchmark.json/md、触发评测集、`bughunt/`(埋雷源码 + 盲测试,可复现) |
+| `https://github.com/vincemakes/token-saver` | `https://github.com/vincemakes/model-boss` |
+| `.claude/skills/token-saver`, `.agents/skills/token-saver` | `.claude/skills/model-boss`, `.agents/skills/model-boss` |
+| `scripts/token-saver-route.py` | `scripts/model-boss.py` |
+| `runtime.token_saver` | `runtime.model_boss` |
+| `.token-saver.json` | `.model-boss.json` |
+| `${XDG_CONFIG_HOME:-$HOME/.config}/token-saver/config.json` | `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/config.json` |
+| `$HOME/.claude/fable-token-saver/providers.env`, `${XDG_CONFIG_HOME:-$HOME/.config}/token-saver/credentials.json` | `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/credentials.json` |
+| `TOKEN_SAVER_*` | `MODEL_BOSS_*` |
+| `token-saver-<role>.md`, `token-saver-<role>.toml` | `model-boss-<role>.md`, `model-boss-<role>.toml` |
+| `token-saver-runs` | `model-boss-runs` |
+| `config/token-saver.example.json`, `config/token-saver.schema.json` | `config/model-boss.example.json`, `config/model-boss.schema.json` |
+| `dist/token-saver.skill` | `dist/model-boss.skill` |
 
-## 如何复现 / 扩展评测
+正常自动发现会忽略上述旧路径与 `TOKEN_SAVER_*`。只有 `scripts/setup-model-providers.sh` 可以显式读取 `$HOME/.claude/fable-token-saver/providers.env`，并只把它当作数据解析，不会 source。迁移只做 no-overwrite 复制，绝不删除或编辑旧数据。
 
-1. 每组条件 = 独立 headless 进程:`claude -p "<prompt>" --model <id> --dangerously-skip-permissions --output-format json`,输出 JSON 自带 `modelUsage` 分模型明细(in/out/cacheRead/cacheWrite/costUSD)——所有数字的来源,零估算
-2. fixture 是自带 tsc+vitest 闸门的小型 pnpm 项目,git 初始化过(skill 依赖 `git diff`);每个 run 用全新拷贝
-3. 对照组 prompt 相同,仅一句差异:with 组"invoke the fable-token-saver skill first",baseline 组"do not invoke any skills"
-4. 调试赛的关键机制是**盲测试集**(`benchmarks/bughunt/hidden.test.ts`):被测方永远看不到,跑完注入 `tests/hidden/` 执行判分。埋雷 6 颗:半开区间双计费、逐行舍入漂移、内部引用泄漏、异步竞态丢更新、缓存不失效、数字键字典序
-5. **额度代理指标 = 该模型名下的 costUSD**(单价对 in/out/cache 的加权与算力同构;官方额度公式不公开)
 
-## 实测结论(v0.1.0 定稿)
+### 历史评测地图与复现方法
 
-- 小任务(<300 行):**负收益** +34~66% → 委托门槛写进 SKILL.md
-- 大构建任务:lite −34% 额度且总费用最低;max(Opus 主循环)−88% 额度但总费用 +86%(额度套利)
-- max 档主循环纪律:Opus 两次干净检查点(fable cacheRead=0);**Sonnet 抱顾问不放(3.7×),两头输** → 推荐 Opus 级
-- 盲测调试赛:**6/6 vs 6/6 能力持平**;但判断密集型任务编排纯亏(2.2× 费用/3.9× 时间)→ "调试不触发"从直觉变数据
-- 模型价目(2026-07):Fable $10/$50,Opus 4.8 $5/$25,Sonnet 5 $3/$15,Haiku 4.5 $1/$5(每百万 token)
+- 原始工作区为 `~/Desktop/devv/fable-token-saver`，v0.1.0 本地安装为 `~/.claude/skills/fable-token-saver`，非 Git 评测数据位于 `~/.claude/skills/fable-token-saver-workspace/`。这些路径只用于复现旧运行。
+- 每组条件使用独立 headless 进程：`claude -p "<prompt>" --model <id> --dangerously-skip-permissions --output-format json`；原始数字来自 JSON 的 `modelUsage`（in/out/cacheRead/cacheWrite/costUSD）。
+- fixture 是已初始化 Git、带 tsc + vitest 闸门的小型 pnpm 项目；每次运行都使用全新拷贝。对照组 prompt 相同，仅在是否先调用 `fable-token-saver` skill 上有一句差异。
+- 盲测 bug-hunt 在运行结束后才注入 `benchmarks/bughunt/hidden.test.ts`，覆盖半开区间双计费、逐行舍入漂移、内部引用泄漏、异步竞态、缓存不失效和数字键字典序六类问题。
+- “额度代理”指该模型名下的 `costUSD`，是对输入、输出与 cache 的价格加权，不是未公开的官方额度公式。
 
-## 踩坑记录(复现评测前必读)
+### 历史观察（单次运行）
 
-1. **在 Claude Code 会话里 spawn `claude -p` 必须洗环境**(`env -i HOME=... PATH=...`):继承的 `CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH` 等变量会让子 CLI 放弃自刷 OAuth token,直接 401
-2. **skill-creator 插件的 run_loop/run_eval 触发检测与 CLI 2.1.198 流事件不兼容**:96 次运行 0 触发,量化结果全部作废;真实触发要用活探针验证(直接 `claude -p` 自然语言问询 + grep 流输出里的 Skill 调用)
-3. **SKILL.md description 硬上限 1024 字符**(package_skill 校验),写触发词前先算预算
-4. **fixture 的 node_modules 千万别进 git**:会污染 `git diff`,直接破坏 skill 的 diff-only 审查流程
-5. zsh 里 `echo ===` 会触发等号展开报错;macOS BSD sed 不支持 BRE 的 `\|`(脱敏管道用 python 别用 sed)
-6. 后台单包派工会把 orchestrator 晾死(结果通知路由不回)→ SKILL.md 已写死"单包前台阻塞派工"
-7. **agent 自判主循环模型不可靠**(2026-07-03 实测):系统 prompt 里的身份串("You are powered by …")可能是静态模板,不跟 `/model` 走;用户选 Opus 的 session 里 agent 自判成 Fable → 误入 lite 模式,整个 session 一次都没调 Fable 顾问,且该丢失完全静默(误判 max 会当场暴露=自己咨询自己,误判 lite 不会)→ SKILL.md 已加"Detect the mode before anything else"一节:信源排序(用户明说 > harness 模型 ID > 身份串)、不确定时默认 max、首行宣告检测结果、矛盾检测(用户措辞预设你之上有顾问时先确认)
+- 小任务（少于 300 行）的编排开销为负收益，因此需要委托门槛。
+- 当时的大型构建记录中，Lite 额度代理为 −34%；Max 为 −88%，但总费用增加 86%。这些数字不能外推。
+- 盲测调试两组都是 6/6，但编排组的费用与时间更高，支持“未定位根因的调试不触发编排”这一边界。
+- 当时观察到高级主循环的两个干净检查点很重要；频繁保留顾问会让成本与协调开销同时上升。
 
-## 后续方向(未做)
+### 历史踩坑记录
 
-- **总费用交叉点**:>5,000 行的超大任务上验证 lite 的美元节省是否显著拉开(现在只有 −5%)
-- **统计显著性**:所有结论均为单次运行(n=1 探针),关键数字值得跑 3-5 次取均值
-- **其他模型组合**:埋雷 fixture 可直接复用于任意 `--model` 组合的能力对比
-- 英文版推文/贴 HN;收集 issue 反馈迭代 v0.2
+1. 在 Claude Code 会话内启动 `claude -p` 子进程时要使用最小环境；继承 OAuth/SDK 变量曾导致子 CLI 直接 401。
+2. 早期 skill-creator 触发检测与 CLI 流事件不兼容，所以真实触发需要活探针，不能只信评测 harness。
+3. `SKILL.md` description 受 1024 字符限制；fixture 的 `node_modules` 不得进入 Git，否则会污染 diff-only 审查。
+4. zsh 的 `echo ===` 与 macOS BSD sed 的语法差异曾导致复现脚本失败；脱敏管道应使用可移植实现。
+5. 背景单包派工的结果通知路由曾经不可靠，因此早期工作流改为前台阻塞派工。
+6. Agent 从静态身份串自判主循环模型曾造成静默误分类。这一历史经验最终演化为当前的宿主结构化身份、canonical fingerprint 与 fail-closed 约束。
 
-## 发布信息
-
-- 当前仓库:https://github.com/vincemakes/token-saver(main,MIT)
-- 历史 v0.1.0 仓库标识:`vincemakes/fable-token-saver`(只用于存档引用)
-- Release v0.1.0 带 `.skill` 安装包;Social preview 已设(`media/og.png`,1280×640)
+未完成的历史方向包括：验证超过 5,000 行任务的总费用交叉点，对关键数字运行 3–5 次以估计方差，以及将同一盲测 fixture 复用到其他模型组合。

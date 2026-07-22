@@ -1,20 +1,22 @@
-# Token Saver
+# Model Boss
 
-![Token Saver — model-independent tiered orchestration](media/og.png)
+![Model Boss — cross-model coding orchestration](media/og.png)
 
 **English** | [简体中文](README.zh-CN.md)
 
-Token Saver is a model-independent orchestration protocol for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Codex](https://github.com/openai/codex). It keeps the model already selected for the conversation as the main loop, then places planning, implementation, gates, and review around it without silently changing that model.
+Big models think. Small models ship.
 
-Canonical repository: [https://github.com/vincemakes/token-saver](https://github.com/vincemakes/token-saver)
+**Cross-model coding orchestration** for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Codex](https://github.com/openai/codex). The conversation's host-selected or inherited main loop is immutable input: Model Boss never replaces it. The **Boss** is the workflow authority holder—Lite keeps that authority inline in the inherited main loop, while Max uses a distinct, verified authority reviewer. "Big" and "small" are workflow-relative roles, not a universal ranking of providers or models.
+
+Canonical repository: [https://github.com/vincemakes/model-boss](https://github.com/vincemakes/model-boss)
 
 ## Should you use it?
 
-Use Token Saver when a task is bounded, constructive, and large enough to repay orchestration overhead: a material multi-file implementation, a migration, repeated mechanical changes, or independent packets with testable acceptance criteria.
+Use Model Boss when a task is bounded, constructive, and large enough to repay orchestration overhead: a material multi-file implementation, a migration, repeated mechanical changes, or independent packets with testable acceptance criteria.
 
 Let the main loop work normally for a tiny edit, pure conversation or analysis, unresolved root-cause debugging, or a design/security decision that cannot yet be expressed as acceptance criteria. Rough signals such as 300+ changed lines or 6+ files can help, but task shape matters more than a fixed threshold.
 
-The published measurements are a historical Claude/Fable/Opus snapshot, not a promise for every model profile. See the [scoped benchmark report](BENCHMARKS.md) before choosing Token Saver for cost or quota reasons.
+The published measurements are a historical Claude/Fable/Opus snapshot, not a promise for every model profile. See the [scoped benchmark report](BENCHMARKS.md) before choosing Model Boss for cost or quota reasons.
 
 ## Lite and Max at a glance
 
@@ -45,7 +47,7 @@ A separate worker is never required. Lite may run entirely in the main loop; Max
 
 ## The main loop is already selected
 
-The host-selected conversation model is immutable input. Token Saver never replaces it, and profile, user, project, or per-run configuration must not contain a substitute main loop. If the host cannot establish the main loop's canonical `provider_family:resolved_model_id:variant` fingerprint, resolution stops with `needs_context`.
+The host-selected conversation model is immutable input. Model Boss never replaces it, and profile, user, project, or per-run configuration must not contain a substitute main loop. If the host cannot establish the main loop's canonical `provider_family:resolved_model_id:variant` fingerprint, resolution stops with `needs_context`.
 
 Route names, wrapper names, endpoints, accounts, and model-family prose are hints, not identity proof. Two different aliases that resolve to the same canonical fingerprint are the same model for authority-separation purposes.
 
@@ -85,7 +87,7 @@ Profiles provide capability-based route defaults:
 
 Those declarations are candidates, not proof. Preflight must verify live reachability, exact effective identity, permissions, credential names, and—when an external command can write—a sandbox bound to that exact invocation.
 
-Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. See [routing and capability resolution](references/routing.md) for the complete rules.
+Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. The published examples and schema are [`config/model-boss.example.json`](config/model-boss.example.json) and [`config/model-boss.schema.json`](config/model-boss.schema.json); project discovery uses `.model-boss.json`, while user discovery uses `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/config.json`. See [routing and capability resolution](references/routing.md) for the complete rules.
 
 The runtime CLI requires Python 3.11+ and Git. The POSIX setup examples also use `bash` and `install`. A write-capable external worker additionally requires a verified OS backend: `/usr/bin/sandbox-exec` on macOS or Bubblewrap (`bwrap`) on Linux, including WSL. Native Windows has no external-writer backend and uses host-native Claude Code or Codex agents instead.
 
@@ -97,11 +99,11 @@ These are fresh-install commands. Each scope installs the skill plus the four ho
 
 ```bash
 mkdir -p "$HOME/.claude/skills"
-git clone https://github.com/vincemakes/token-saver.git "$HOME/.claude/skills/token-saver"
+git clone https://github.com/vincemakes/model-boss.git "$HOME/.claude/skills/model-boss"
 mkdir -p "$HOME/.claude/agents"
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 "$HOME/.claude/skills/token-saver/assets/agents/claude-code/$role.md" \
-    "$HOME/.claude/agents/token-saver-$role.md"
+  install -m 0644 "$HOME/.claude/skills/model-boss/assets/agents/claude-code/$role.md" \
+    "$HOME/.claude/agents/model-boss-$role.md"
 done
 ```
 
@@ -109,39 +111,39 @@ done
 
 ```bash
 mkdir -p .claude/skills
-git clone https://github.com/vincemakes/token-saver.git .claude/skills/token-saver
+git clone https://github.com/vincemakes/model-boss.git .claude/skills/model-boss
 mkdir -p .claude/agents
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 ".claude/skills/token-saver/assets/agents/claude-code/$role.md" \
-    ".claude/agents/token-saver-$role.md"
+  install -m 0644 ".claude/skills/model-boss/assets/agents/claude-code/$role.md" \
+    ".claude/agents/model-boss-$role.md"
 done
 ```
 
 ### PowerShell — user scope
 
 ```powershell
-$skill = Join-Path $HOME ".claude\skills\token-saver"
+$skill = Join-Path $HOME ".claude\skills\model-boss"
 $agents = Join-Path $HOME ".claude\agents"
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/token-saver.git $skill
+git clone https://github.com/vincemakes/model-boss.git $skill
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\claude-code\$role.md") `
-    (Join-Path $agents "token-saver-$role.md")
+    (Join-Path $agents "model-boss-$role.md")
 }
 ```
 
 ### PowerShell — project scope
 
 ```powershell
-$skill = ".claude\skills\token-saver"
+$skill = ".claude\skills\model-boss"
 $agents = ".claude\agents"
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/token-saver.git $skill
+git clone https://github.com/vincemakes/model-boss.git $skill
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\claude-code\$role.md") `
-    (Join-Path $agents "token-saver-$role.md")
+    (Join-Path $agents "model-boss-$role.md")
 }
 ```
 
@@ -153,7 +155,7 @@ Check the installed CLI first:
 codex --version
 ```
 
-`codex --version` is diagnostic, not a capability proof. Before selecting the bundled profile, Token Saver preflight must confirm that the installed Codex supports custom agents, that the exact Sol/Terra/Luna IDs are available in the current account and model catalog, and that the requested sandbox and reasoning settings are accepted. A failed availability check returns `provider_unavailable` or `reviewer_unavailable`. Setup never upgrades the CLI automatically.
+`codex --version` is diagnostic, not a capability proof. Before selecting the bundled profile, Model Boss preflight must confirm that the installed Codex supports custom agents, that the exact Sol/Terra/Luna IDs are available in the current account and model catalog, and that the requested sandbox and reasoning settings are accepted. A failed availability check returns `provider_unavailable` or `reviewer_unavailable`. Setup never upgrades the CLI automatically.
 
 The bundled Sol profile treats Sol as an authority route, Terra as a balanced route, and Luna as a fast route. These are fresh-install commands for the skill and four Codex agent declarations.
 
@@ -161,11 +163,11 @@ The bundled Sol profile treats Sol as an authority route, Terra as a balanced ro
 
 ```bash
 mkdir -p .agents/skills
-git clone https://github.com/vincemakes/token-saver.git .agents/skills/token-saver
+git clone https://github.com/vincemakes/model-boss.git .agents/skills/model-boss
 mkdir -p .codex/agents
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 ".agents/skills/token-saver/assets/agents/codex/$role.toml" \
-    ".codex/agents/token-saver-$role.toml"
+  install -m 0644 ".agents/skills/model-boss/assets/agents/codex/$role.toml" \
+    ".codex/agents/model-boss-$role.toml"
 done
 ```
 
@@ -173,45 +175,45 @@ done
 
 ```bash
 mkdir -p "$HOME/.agents/skills"
-git clone https://github.com/vincemakes/token-saver.git "$HOME/.agents/skills/token-saver"
+git clone https://github.com/vincemakes/model-boss.git "$HOME/.agents/skills/model-boss"
 mkdir -p "$HOME/.codex/agents"
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 "$HOME/.agents/skills/token-saver/assets/agents/codex/$role.toml" \
-    "$HOME/.codex/agents/token-saver-$role.toml"
+  install -m 0644 "$HOME/.agents/skills/model-boss/assets/agents/codex/$role.toml" \
+    "$HOME/.codex/agents/model-boss-$role.toml"
 done
 ```
 
 ### PowerShell — project scope
 
 ```powershell
-$skill = ".agents\skills\token-saver"
+$skill = ".agents\skills\model-boss"
 $agents = ".codex\agents"
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/token-saver.git $skill
+git clone https://github.com/vincemakes/model-boss.git $skill
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\codex\$role.toml") `
-    (Join-Path $agents "token-saver-$role.toml")
+    (Join-Path $agents "model-boss-$role.toml")
 }
 ```
 
 ### PowerShell — user scope
 
 ```powershell
-$skill = Join-Path $HOME ".agents\skills\token-saver"
+$skill = Join-Path $HOME ".agents\skills\model-boss"
 $agents = Join-Path $HOME ".codex\agents"
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/token-saver.git $skill
+git clone https://github.com/vincemakes/model-boss.git $skill
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\codex\$role.toml") `
-    (Join-Path $agents "token-saver-$role.toml")
+    (Join-Path $agents "model-boss-$role.toml")
 }
 ```
 
 ## Kimi and GLM external routes
 
-From the installed checkout, migrate existing provider data and install the compatibility wrappers into an explicit directory:
+From the installed checkout, install the compatibility wrappers into an explicit directory:
 
 ```bash
 bash scripts/setup-model-providers.sh --install-path "$HOME/.local/bin"
@@ -219,7 +221,7 @@ bash scripts/setup-model-providers.sh --install-path "$HOME/.local/bin"
 
 The setup command never edits shell startup files; add that directory to `PATH` yourself if necessary. Its exact role mapping is:
 
-If neither the legacy file nor the new credentials file exists, an explicit `--install-path` still installs the wrappers only; it does not create a credentials file or invent secret values. Supply the required environment variables at launch or configure credentials separately before using a provider route.
+If the credentials file does not exist, an explicit `--install-path` still installs the wrappers only; it does not create a credentials file or invent secret values. Supply the required environment variables at launch or configure `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/credentials.json` (overridable with `MODEL_BOSS_CREDENTIALS`) before using a provider route.
 
 | Route role | Reviewer transport base command | Write command allowed only inside verified OS sandbox |
 |---|---|---|
@@ -229,15 +231,13 @@ If neither the legacy file nor the new credentials file exists, an explicit `--i
 | GLM implementer | — | `claude-glm-bypass -p` |
 | GLM fast scout/mechanic | `claude-glm-turbo` | `claude-glm-turbo-bypass -p` |
 
-When the new credentials file does not yet exist, setup migrates the existing
-`$HOME/.claude/fable-token-saver/providers.env` as data; it never sources that file.
 The main loop can then run an external implementation as one sealed operation:
 
 ```bash
-mkdir -p "$PWD/../token-saver-runs"
-python3 scripts/token-saver-route.py worker \
+mkdir -p "$PWD/../model-boss-runs"
+python3 scripts/model-boss.py worker \
   --repo "$PWD" \
-  --temp-parent "$PWD/../token-saver-runs" \
+  --temp-parent "$PWD/../model-boss-runs" \
   --route claude-kimi-bypass \
   --task /absolute/path/to/task.json \
   --mode lite
@@ -256,7 +256,7 @@ After the main loop has reviewed the complete evidence and written a strict revi
 context JSON, seal the matching review. Lite uses the inherited main loop inline:
 
 ```bash
-python3 scripts/token-saver-route.py review --inline \
+python3 scripts/model-boss.py review --inline \
   --main-fingerprint <provider:model:variant> \
   --manifest <manifest> \
   --context /absolute/path/to/review-context.json
@@ -265,7 +265,7 @@ python3 scripts/token-saver-route.py review --inline \
 Max uses an external reviewer configured by profile and route; `--inline` is invalid:
 
 ```bash
-python3 scripts/token-saver-route.py review --profile /absolute/path/to/profile.json \
+python3 scripts/model-boss.py review --profile /absolute/path/to/profile.json \
   --route <reviewer-route> \
   --main-fingerprint <provider:model:variant> \
   --manifest <manifest> \
@@ -277,7 +277,7 @@ Integration reads that sealed receipt through the manifest; it no longer accepts
 caller-supplied approval file:
 
 ```bash
-python3 scripts/token-saver-route.py integrate <manifest>
+python3 scripts/model-boss.py integrate <manifest>
 ```
 
 See the [external CLI contract](references/adapters/external-cli.md) for the exact task
@@ -294,12 +294,12 @@ Write-capable bypass routes launch only inside a verified OS sandbox bound to th
 
 The external worker model receives exactly the `Read`, `Glob`, `Grep`, `Edit`, and
 `Write` tools. Bash is disabled; Web and MCP tools are unavailable. Declared gate
-commands are direct argument arrays executed by the Token Saver host after the model
+commands are direct argument arrays executed by the Model Boss host after the model
 call, not shell access granted to the model.
 
 ## Safety and failure behavior
 
-Token Saver fails closed:
+Model Boss fails closed:
 
 - An explicit Max request never silently degrades to Lite. An unavailable, colliding, unverified, or effectively write-capable reviewer blocks dispatch.
 - External writers never run in the user's repository. They receive only named credentials in a minimal child environment and can write only inside an invocation-owned disposable worktree.
@@ -308,7 +308,7 @@ Token Saver fails closed:
   short-lived, narrowly scoped token with the least permissions the route supports.
   The tool allowlist and filesystem sandbox are not a network security boundary: a
   malicious or compromised provider binary can misuse credentials or readable data,
-  and Token Saver cannot prevent that binary from sending them over its permitted
+  and Model Boss cannot prevent that binary from sending them over its permitted
   provider connection. Install and run only provider binaries you trust.
 - A worker may self-fix failed gates at most three times. Final authority review allows two revision rounds; a third `revise` returns `review_revise` without integration.
 - Out-of-scope writes return `scope_violation`. Changed evidence returns `approval_stale`. Destination drift returns `destination_changed` and requires a fresh snapshot, audit, main-loop review, and authority approval.
@@ -337,11 +337,30 @@ The [full benchmark report](BENCHMARKS.md) is a historical reference for the 202
 
 In that recorded large constructive run, Lite changed strongest-model output tokens by `-42%` and used a `-34%` price-weighted quota proxy; Max changed strongest-model output tokens by `-89%` and used a `-88%` quota proxy. Those are different measurements and should not be interchanged. The blind bug-hunt is one observed probe, not general proof, and the report preserves its single-run caveat, raw figures, methodology, and negative results.
 
-## When Token Saver steps aside
+## When Model Boss steps aside
 
-Token Saver steps aside before dispatch for tiny edits, pure conversation, unresolved debugging, judgment-dense work without testable acceptance criteria, or tasks below the delegation floor. It also stops rather than improvising when identity, reviewer, provider, sandbox, gate, scope, approval, or destination invariants fail.
+Model Boss steps aside before dispatch for tiny edits, pure conversation, unresolved debugging, judgment-dense work without testable acceptance criteria, or tasks below the delegation floor. It also stops rather than improvising when identity, reviewer, provider, sandbox, gate, scope, approval, or destination invariants fail.
 
 Stepping aside leaves the inherited main loop in charge. It does not switch models, invent a route, weaken Max, or treat orchestration already spent as a reason to continue unsafely.
+
+## Migrating from Token Saver
+
+Migration is an explicit, no-overwrite copy to the Model Boss surfaces below. Normal discovery ignores all former paths and variables. Only `scripts/setup-model-providers.sh` may explicitly read the legacy `$HOME/.claude/fable-token-saver/providers.env`, and it parses that file as data—never as shell code. Migration never deletes or edits legacy data.
+
+| Former surface | Model Boss surface |
+|---|---|
+| `https://github.com/vincemakes/token-saver` | `https://github.com/vincemakes/model-boss` |
+| `.claude/skills/token-saver`, `.agents/skills/token-saver` | `.claude/skills/model-boss`, `.agents/skills/model-boss` |
+| `scripts/token-saver-route.py` | `scripts/model-boss.py` |
+| `runtime.token_saver` | `runtime.model_boss` |
+| `.token-saver.json` | `.model-boss.json` |
+| `${XDG_CONFIG_HOME:-$HOME/.config}/token-saver/config.json` | `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/config.json` |
+| `$HOME/.claude/fable-token-saver/providers.env`, `${XDG_CONFIG_HOME:-$HOME/.config}/token-saver/credentials.json` | `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/credentials.json` |
+| `TOKEN_SAVER_*` | `MODEL_BOSS_*` |
+| `token-saver-<role>.md`, `token-saver-<role>.toml` | `model-boss-<role>.md`, `model-boss-<role>.toml` |
+| `token-saver-runs` | `model-boss-runs` |
+| `config/token-saver.example.json`, `config/token-saver.schema.json` | `config/model-boss.example.json`, `config/model-boss.schema.json` |
+| `dist/token-saver.skill` | `dist/model-boss.skill` |
 
 ## License
 
