@@ -87,7 +87,7 @@ Profiles provide capability-based route defaults:
 
 Those declarations are candidates, not proof. Preflight must verify live reachability, exact effective identity, permissions, credential names, and—when an external command can write—a sandbox bound to that exact invocation.
 
-Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. The published examples and schema are [`config/model-boss.example.json`](config/model-boss.example.json) and [`config/model-boss.schema.json`](config/model-boss.schema.json); project discovery uses `.model-boss.json`, while user discovery uses `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/config.json`. See [routing and capability resolution](references/routing.md) for the complete rules.
+Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. The published examples and schema are [`config/model-boss.example.json`](config/model-boss.example.json) and [`config/model-boss.schema.json`](config/model-boss.schema.json); project discovery uses `.model-boss.json`. On POSIX, user discovery uses `$XDG_CONFIG_HOME/model-boss/config.json` only when `XDG_CONFIG_HOME` is absolute; otherwise it uses `$HOME/.config/model-boss/config.json`. PowerShell follows the same absolute-`XDG_CONFIG_HOME` rule and otherwise uses `$HOME\.config\model-boss\config.json`. See [routing and capability resolution](references/routing.md) for the complete rules.
 
 The runtime CLI requires Python 3.11+ and Git. The POSIX setup examples also use `bash` and `install`. A write-capable external worker additionally requires a verified OS backend: `/usr/bin/sandbox-exec` on macOS or Bubblewrap (`bwrap`) on Linux, including WSL. Native Windows has no external-writer backend and uses host-native Claude Code or Codex agents instead.
 
@@ -221,7 +221,7 @@ bash scripts/setup-model-providers.sh --install-path "$HOME/.local/bin"
 
 The setup command never edits shell startup files; add that directory to `PATH` yourself if necessary. Its exact role mapping is:
 
-If the credentials file does not exist, an explicit `--install-path` still installs the wrappers only; it does not create a credentials file or invent secret values. Supply the required environment variables at launch or configure `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/credentials.json` (overridable with `MODEL_BOSS_CREDENTIALS`) before using a provider route.
+If the credentials file does not exist, an explicit `--install-path` still installs the wrappers only; it does not create a credentials file or invent secret values. On POSIX, credentials discovery uses `$XDG_CONFIG_HOME/model-boss/credentials.json` only when `XDG_CONFIG_HOME` is absolute, and otherwise `$HOME/.config/model-boss/credentials.json`. PowerShell follows the same absolute-`XDG_CONFIG_HOME` rule and otherwise uses `$HOME\.config\model-boss\credentials.json`. An absolute `MODEL_BOSS_CREDENTIALS` overrides discovery.
 
 | Route role | Reviewer transport base command | Write command allowed only inside verified OS sandbox |
 |---|---|---|
@@ -345,7 +345,15 @@ Stepping aside leaves the inherited main loop in charge. It does not switch mode
 
 ## Migrating from Token Saver
 
-Migration is an explicit, no-overwrite copy to the Model Boss surfaces below. Normal discovery ignores all former paths and variables. Only `scripts/setup-model-providers.sh` may explicitly read the legacy `$HOME/.claude/fable-token-saver/providers.env`, and it parses that file as data—never as shell code. Migration never deletes or edits legacy data.
+Migration is explicit and no-overwrite. Normal discovery ignores all former paths and old variables. The only canonical legacy-provider import is:
+
+```bash
+python3 scripts/model-boss.py setup-providers --legacy-source <absolute-old-providers.env>
+```
+
+That command parses the named legacy `$HOME/.claude/fable-token-saver/providers.env`-format file as data—never as shell code. `scripts/setup-model-providers.sh` is only a wrapper around the canonical command. Migration never deletes or edits legacy data.
+
+Old JSON credentials are never auto-copied. Manually copy an old JSON credentials file only after checking its file and directory permissions, or point an absolute MODEL_BOSS_CREDENTIALS override at the existing JSON. Old variables are ignored; the exact rows below are manual migration mappings, not compatibility aliases.
 
 | Former surface | Model Boss surface |
 |---|---|
@@ -354,9 +362,16 @@ Migration is an explicit, no-overwrite copy to the Model Boss surfaces below. No
 | `scripts/token-saver-route.py` | `scripts/model-boss.py` |
 | `runtime.token_saver` | `runtime.model_boss` |
 | `.token-saver.json` | `.model-boss.json` |
-| `${XDG_CONFIG_HOME:-$HOME/.config}/token-saver/config.json` | `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/config.json` |
-| `$HOME/.claude/fable-token-saver/providers.env`, `${XDG_CONFIG_HOME:-$HOME/.config}/token-saver/credentials.json` | `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/credentials.json` |
-| `TOKEN_SAVER_*` | `MODEL_BOSS_*` |
+| `$XDG_CONFIG_HOME/token-saver/config.json` when `XDG_CONFIG_HOME` is absolute | `$XDG_CONFIG_HOME/model-boss/config.json` |
+| `$HOME/.config/token-saver/config.json` otherwise | `$HOME/.config/model-boss/config.json` |
+| `$HOME\.config\token-saver\config.json` on PowerShell unless `XDG_CONFIG_HOME` is absolute | `$HOME\.config\model-boss\config.json` |
+| `$XDG_CONFIG_HOME/token-saver/credentials.json` when `XDG_CONFIG_HOME` is absolute | `$XDG_CONFIG_HOME/model-boss/credentials.json` |
+| `$HOME/.config/token-saver/credentials.json` otherwise | `$HOME/.config/model-boss/credentials.json` |
+| `$HOME\.config\token-saver\credentials.json` on PowerShell unless `XDG_CONFIG_HOME` is absolute | `$HOME\.config\model-boss\credentials.json` |
+| `TOKEN_SAVER_CREDENTIALS` | `MODEL_BOSS_CREDENTIALS` |
+| `TOKEN_SAVER_INVOCATION_MANIFEST` | `MODEL_BOSS_INVOCATION_MANIFEST` |
+| `TOKEN_SAVER_TRUSTED_GATE_FAILURES` | `MODEL_BOSS_TRUSTED_GATE_FAILURES` |
+| `TOKEN_SAVER_PROVIDER_API_KEY` | `MODEL_BOSS_PROVIDER_API_KEY` |
 | `token-saver-<role>.md`, `token-saver-<role>.toml` | `model-boss-<role>.md`, `model-boss-<role>.toml` |
 | `token-saver-runs` | `model-boss-runs` |
 | `config/token-saver.example.json`, `config/token-saver.schema.json` | `config/model-boss.example.json`, `config/model-boss.schema.json` |

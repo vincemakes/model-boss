@@ -79,7 +79,7 @@ Worker 最多自修三次。最终 Reviewer 最多提出两轮 `revise`；第三
 - Kimi K3 只有在精确身份被固定并由 preflight 验证后，才能作为高级外部路由。
 
 你可以增加未来模型或自定义 CLI 路由，只要它们声明能力和角色，并通过相同的身份、
-权限、沙箱与证据检查。发布的示例与 schema 是 [`config/model-boss.example.json`](config/model-boss.example.json) 和 [`config/model-boss.schema.json`](config/model-boss.schema.json)；项目自动发现 `.model-boss.json`，用户配置自动发现 `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/config.json`。Profile 文件位于 [references/profiles](references/profiles)。
+权限、沙箱与证据检查。发布的示例与 schema 是 [`config/model-boss.example.json`](config/model-boss.example.json) 和 [`config/model-boss.schema.json`](config/model-boss.schema.json)；项目自动发现 `.model-boss.json`。POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/config.json`，否则使用 `$HOME/.config/model-boss/config.json`。PowerShell 遵循同样的绝对 `XDG_CONFIG_HOME` 规则，否则使用 `$HOME\.config\model-boss\config.json`。Profile 文件位于 [references/profiles](references/profiles)。
 
 运行时 CLI 需要 Python 3.11+ 与 Git；POSIX 安装示例还会使用 `bash` 和 `install`。
 可写的外部 Worker 还必须有验证过的 OS 后端：macOS 使用
@@ -224,8 +224,7 @@ bash scripts/setup-model-providers.sh --install-path "$HOME/.local/bin"
 
 安装脚本不会修改 shell 启动文件；如果需要，请自行把该目录加入 `PATH`。
 如果 credentials 文件不存在，显式 `--install-path` 仍只安装 wrappers，
-不会创建 credentials 文件或虚构秘密值。使用 Provider 路由前，请在启动时提供所需
-环境变量，或配置 `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/credentials.json`（可用 `MODEL_BOSS_CREDENTIALS` 覆盖）。
+不会创建 credentials 文件或虚构秘密值。POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/credentials.json`，否则使用 `$HOME/.config/model-boss/credentials.json`。PowerShell 遵循同样的绝对 `XDG_CONFIG_HOME` 规则，否则使用 `$HOME\.config\model-boss\credentials.json`。绝对路径的 `MODEL_BOSS_CREDENTIALS` 可覆盖自动发现。
 
 | 路由角色 | Reviewer transport 基础命令 | 只有验证过 OS 沙箱才允许的写命令 |
 |---|---|---|
@@ -336,7 +335,15 @@ Web 与 MCP 工具不可用。task 声明的 gate 命令使用直接参数数组
 
 ## 从 Token Saver 迁移
 
-迁移是显式的、不覆盖的复制操作，目标是下表的 Model Boss 表面。正常自动发现会忽略所有旧路径与旧环境变量。只有 `scripts/setup-model-providers.sh` 可以显式读取旧的 `$HOME/.claude/fable-token-saver/providers.env`，并且只会把它当作数据解析，绝不会当作 shell 代码。迁移绝不删除或编辑旧数据。
+迁移是显式且 no-overwrite 的。正常自动发现会忽略所有旧路径与旧环境变量。唯一标准的旧 Provider 导入命令是：
+
+```bash
+python3 scripts/model-boss.py setup-providers --legacy-source <absolute-old-providers.env>
+```
+
+该命令只会把指定的旧 `$HOME/.claude/fable-token-saver/providers.env` 格式文件当作数据解析，绝不会当作 shell 代码。`scripts/setup-model-providers.sh` 只是这条标准命令的 wrapper。迁移绝不删除或编辑旧数据。
+
+旧 JSON credentials 绝不自动复制。手动复制前必须先检查文件和目录权限，或者让 `MODEL_BOSS_CREDENTIALS` 指向现有 JSON 的绝对路径。旧环境变量会被忽略；下列是手动迁移映射，不是兼容别名。
 
 | 旧表面 | Model Boss 表面 |
 |---|---|
@@ -345,9 +352,16 @@ Web 与 MCP 工具不可用。task 声明的 gate 命令使用直接参数数组
 | `scripts/token-saver-route.py` | `scripts/model-boss.py` |
 | `runtime.token_saver` | `runtime.model_boss` |
 | `.token-saver.json` | `.model-boss.json` |
-| `${XDG_CONFIG_HOME:-$HOME/.config}/token-saver/config.json` | `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/config.json` |
-| `$HOME/.claude/fable-token-saver/providers.env`, `${XDG_CONFIG_HOME:-$HOME/.config}/token-saver/credentials.json` | `${XDG_CONFIG_HOME:-$HOME/.config}/model-boss/credentials.json` |
-| `TOKEN_SAVER_*` | `MODEL_BOSS_*` |
+| `XDG_CONFIG_HOME` 为绝对路径时的 `$XDG_CONFIG_HOME/token-saver/config.json` | `$XDG_CONFIG_HOME/model-boss/config.json` |
+| 否则的 `$HOME/.config/token-saver/config.json` | `$HOME/.config/model-boss/config.json` |
+| PowerShell 在 `XDG_CONFIG_HOME` 非绝对路径时的 `$HOME\.config\token-saver\config.json` | `$HOME\.config\model-boss\config.json` |
+| `XDG_CONFIG_HOME` 为绝对路径时的 `$XDG_CONFIG_HOME/token-saver/credentials.json` | `$XDG_CONFIG_HOME/model-boss/credentials.json` |
+| 否则的 `$HOME/.config/token-saver/credentials.json` | `$HOME/.config/model-boss/credentials.json` |
+| PowerShell 在 `XDG_CONFIG_HOME` 非绝对路径时的 `$HOME\.config\token-saver\credentials.json` | `$HOME\.config\model-boss\credentials.json` |
+| `TOKEN_SAVER_CREDENTIALS` | `MODEL_BOSS_CREDENTIALS` |
+| `TOKEN_SAVER_INVOCATION_MANIFEST` | `MODEL_BOSS_INVOCATION_MANIFEST` |
+| `TOKEN_SAVER_TRUSTED_GATE_FAILURES` | `MODEL_BOSS_TRUSTED_GATE_FAILURES` |
+| `TOKEN_SAVER_PROVIDER_API_KEY` | `MODEL_BOSS_PROVIDER_API_KEY` |
 | `token-saver-<role>.md`, `token-saver-<role>.toml` | `model-boss-<role>.md`, `model-boss-<role>.toml` |
 | `token-saver-runs` | `model-boss-runs` |
 | `config/token-saver.example.json`, `config/token-saver.schema.json` | `config/model-boss.example.json`, `config/model-boss.schema.json` |

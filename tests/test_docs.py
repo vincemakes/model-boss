@@ -54,6 +54,14 @@ def _first_nonblank_lines(text: str, limit: int = 12) -> tuple[str, ...]:
     return tuple(line.strip() for line in text.splitlines() if line.strip())[:limit]
 
 
+def _level_two_section(text: str, heading: str) -> str:
+    marker = f"## {heading}"
+    start = text.index(marker)
+    following = re.search(r"^## (?!#)", text[start + len(marker) :], re.MULTILINE)
+    end = start + len(marker) + following.start() if following else len(text)
+    return text[start:end]
+
+
 class DocumentationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -132,6 +140,105 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("## Migrating from Token Saver", self.en)
         self.assertIn("## 从 Token Saver 迁移", self.zh)
         self.assertIn("## 从 Token Saver 迁移", self.devnotes)
+
+    def test_config_discovery_docs_require_absolute_xdg_or_home_fallback(self) -> None:
+        documents = (
+            ("en", self.en, "Migrating from Token Saver"),
+            ("zh", self.zh, "从 Token Saver 迁移"),
+            ("devnotes", self.devnotes, "从 Token Saver 迁移"),
+        )
+        exact_paths = (
+            "$XDG_CONFIG_HOME/model-boss/config.json",
+            "$HOME/.config/model-boss/config.json",
+            "$XDG_CONFIG_HOME/model-boss/credentials.json",
+            "$HOME/.config/model-boss/credentials.json",
+            r"$HOME\.config\model-boss\config.json",
+            r"$HOME\.config\model-boss\credentials.json",
+        )
+        for language, text, migration_heading in documents:
+            with self.subTest(language=language):
+                self.assertNotIn("${XDG_CONFIG_HOME:-$HOME/.config}", text)
+                migration = _level_two_section(text, migration_heading)
+                active = text[: text.index(f"## {migration_heading}")]
+                for section_name, section in (("active", active), ("migration", migration)):
+                    with self.subTest(language=language, section=section_name):
+                        for path in exact_paths:
+                            self.assertIn(path, section)
+                        self.assertRegex(
+                            section,
+                            r"(?is)(XDG_CONFIG_HOME.{0,100}absolute|"
+                            r"XDG_CONFIG_HOME.{0,100}绝对)",
+                        )
+
+    def test_migration_docs_use_explicit_provider_setup_and_json_policy(self) -> None:
+        migrations = (
+            ("en", _level_two_section(self.en, "Migrating from Token Saver")),
+            ("zh", _level_two_section(self.zh, "从 Token Saver 迁移")),
+            ("devnotes", _level_two_section(self.devnotes, "从 Token Saver 迁移")),
+        )
+        command = (
+            "python3 scripts/model-boss.py setup-providers "
+            "--legacy-source <absolute-old-providers.env>"
+        )
+        for language, migration in migrations:
+            with self.subTest(language=language):
+                self.assertIn(command, migration)
+                self.assertRegex(
+                    migration,
+                    r"(?is)scripts/setup-model-providers\.sh.{0,100}(wrapper|\u5305装)",
+                )
+                self.assertRegex(
+                    migration,
+                    r"(?is)(old|legacy|\u65e7).{0,80}(JSON|json).{0,80}"
+                    r"(never auto-copied|not auto-copied|\u4e0d会自动复制|\u7edd不自动复制)",
+                )
+                self.assertRegex(
+                    migration,
+                    r"(?is)(manually copy|manual copy|\u624b动复制).{0,120}"
+                    r"(permissions|\u6743限)",
+                )
+                self.assertRegex(
+                    migration,
+                    r"(?is)(absolute MODEL_BOSS_CREDENTIALS|"
+                    r"MODEL_BOSS_CREDENTIALS.{0,80}(absolute|\u7edd对))",
+                )
+
+    def test_migration_docs_map_exact_environment_variables_manually(self) -> None:
+        migrations = (
+            ("en", _level_two_section(self.en, "Migrating from Token Saver")),
+            ("zh", _level_two_section(self.zh, "从 Token Saver 迁移")),
+            ("devnotes", _level_two_section(self.devnotes, "从 Token Saver 迁移")),
+        )
+        mappings = (
+            ("TOKEN_SAVER_CREDENTIALS", "MODEL_BOSS_CREDENTIALS"),
+            (
+                "TOKEN_SAVER_INVOCATION_MANIFEST",
+                "MODEL_BOSS_INVOCATION_MANIFEST",
+            ),
+            (
+                "TOKEN_SAVER_TRUSTED_GATE_FAILURES",
+                "MODEL_BOSS_TRUSTED_GATE_FAILURES",
+            ),
+            ("TOKEN_SAVER_PROVIDER_API_KEY", "MODEL_BOSS_PROVIDER_API_KEY"),
+        )
+        for language, migration in migrations:
+            with self.subTest(language=language):
+                self.assertNotIn("TOKEN_SAVER_*", migration)
+                for old, new in mappings:
+                    self.assertRegex(
+                        migration,
+                        rf"(?m)^\| `{old}` \| `{new}` \|$",
+                    )
+                self.assertRegex(
+                    migration,
+                    r"(?is)(old variables|legacy variables|\u65e7环境变量).{0,100}"
+                    r"(ignored|\u5ffd略)",
+                )
+                self.assertRegex(
+                    migration,
+                    r"(?is)(manual migration|manually migrate|\u624b动迁移).{0,100}"
+                    r"(not compatibility|no compatibility|\u4e0d是兼容|\u975e兼容)",
+                )
 
     def test_published_schema_uses_the_canonical_repository(self) -> None:
         self.assertIsNotNone(
