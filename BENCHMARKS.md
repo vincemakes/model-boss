@@ -4,6 +4,8 @@
 
 > Historical reference-stack notice: these runs measure the 2026 Claude/Fable/Opus stack. They do not predict savings for Sol, Kimi, or future model profiles. `-42%` and `-89%` are recorded strongest-model output-token changes; `-34%` and `-88%` are price-weighted strongest-model quota changes used only as a quota proxy. The blind bug-hunt is one observed probe, not general proof of capability parity.
 
+> Evidence-path provenance: captured absolute workspace prefixes in `benchmarks/benchmark.json` were normalized to `<historical-workspace>` for publication. Task names, gate output, measurements, and all remaining evidence are unchanged; the placeholder does not claim that these runs occurred under a Model Boss directory.
+
 These are the historical reference measurements behind Model Boss. All numbers come from real headless `claude -p` runs, measured via the CLI's per-model usage JSON — no estimation. Every run passed both gates (`tsc --noEmit` + `vitest`) and all quality assertions; **output quality was identical across conditions**. The differences are cost, quota, and time.
 
 ## Methodology

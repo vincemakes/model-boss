@@ -49,6 +49,29 @@ class EvaluationBrandingTests(unittest.TestCase):
         self.assertEqual(benchmark["metadata"]["skill_name"], "model-boss")
         self.assertEqual(evals["skill_name"], "model-boss")
 
+    def test_historical_evidence_paths_use_a_documented_neutral_placeholder(self) -> None:
+        benchmark = json.loads(
+            (ROOT / "benchmarks" / "benchmark.json").read_text(encoding="utf-8")
+        )
+        typecheck_evidence = [
+            expectation["evidence"]
+            for run in benchmark["runs"]
+            for expectation in run["expectations"]
+            if expectation["text"] == "gate-typecheck-passes"
+            and "taskboard-fixture@ typecheck" in expectation["evidence"]
+        ]
+
+        self.assertEqual(len(typecheck_evidence), 6)
+        for evidence in typecheck_evidence:
+            with self.subTest(evidence=evidence):
+                self.assertIn("<historical-workspace>/iteration-1/", evidence)
+                self.assertNotIn("model-boss-workspace", evidence)
+
+        english = (ROOT / "BENCHMARKS.md").read_text(encoding="utf-8")
+        chinese = (ROOT / "BENCHMARKS.zh-CN.md").read_text(encoding="utf-8")
+        self.assertIn("normalized to `<historical-workspace>`", english)
+        self.assertIn("归一化为 `<historical-workspace>`", chinese)
+
     def test_every_positive_trigger_names_model_boss(self) -> None:
         triggers = json.loads(
             (ROOT / "benchmarks" / "trigger-eval.json").read_text(encoding="utf-8")

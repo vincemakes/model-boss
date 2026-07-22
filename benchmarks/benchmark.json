@@ -32,7 +32,7 @@
         {
           "text": "gate-typecheck-passes",
           "passed": true,
-          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/model-boss-workspace/iteration-1/multi-file-feature/with_skill/project\n> tsc --noEmit\n\n"
+          "evidence": "\n> taskboard-fixture@ typecheck <historical-workspace>/iteration-1/multi-file-feature/with_skill/project\n> tsc --noEmit\n\n"
         },
         {
           "text": "gate-tests-pass",
@@ -75,7 +75,7 @@
         {
           "text": "gate-typecheck-passes",
           "passed": true,
-          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/model-boss-workspace/iteration-1/mechanical-batch-rename/with_skill/project\n> tsc --noEmit\n\n"
+          "evidence": "\n> taskboard-fixture@ typecheck <historical-workspace>/iteration-1/mechanical-batch-rename/with_skill/project\n> tsc --noEmit\n\n"
         },
         {
           "text": "gate-tests-pass",
@@ -118,7 +118,7 @@
         {
           "text": "gate-typecheck-passes",
           "passed": true,
-          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/model-boss-workspace/iteration-1/mixed-design-and-impl/with_skill/project\n> tsc --noEmit\n\n"
+          "evidence": "\n> taskboard-fixture@ typecheck <historical-workspace>/iteration-1/mixed-design-and-impl/with_skill/project\n> tsc --noEmit\n\n"
         },
         {
           "text": "gate-tests-pass",
@@ -209,7 +209,7 @@
         {
           "text": "gate-typecheck-passes",
           "passed": true,
-          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/model-boss-workspace/iteration-1/multi-file-feature/without_skill/project\n> tsc --noEmit\n\n"
+          "evidence": "\n> taskboard-fixture@ typecheck <historical-workspace>/iteration-1/multi-file-feature/without_skill/project\n> tsc --noEmit\n\n"
         },
         {
           "text": "gate-tests-pass",
@@ -252,7 +252,7 @@
         {
           "text": "gate-typecheck-passes",
           "passed": true,
-          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/model-boss-workspace/iteration-1/mechanical-batch-rename/without_skill/project\n> tsc --noEmit\n\n"
+          "evidence": "\n> taskboard-fixture@ typecheck <historical-workspace>/iteration-1/mechanical-batch-rename/without_skill/project\n> tsc --noEmit\n\n"
         },
         {
           "text": "gate-tests-pass",
@@ -295,7 +295,7 @@
         {
           "text": "gate-typecheck-passes",
           "passed": true,
-          "evidence": "\n> taskboard-fixture@ typecheck /Users/vinve/.claude/skills/model-boss-workspace/iteration-1/mixed-design-and-impl/without_skill/project\n> tsc --noEmit\n\n"
+          "evidence": "\n> taskboard-fixture@ typecheck <historical-workspace>/iteration-1/mixed-design-and-impl/without_skill/project\n> tsc --noEmit\n\n"
         },
         {
           "text": "gate-tests-pass",
