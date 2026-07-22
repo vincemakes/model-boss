@@ -1,7 +1,7 @@
 # Token Saver Cross-Platform Redesign
 
 **Date:** 2026-07-21  
-**Status:** Approved for implementation planning  
+**Status:** Approved; sealed authority-mode workflow implemented
 **Repository:** `vincemakes/token-saver`
 
 ## Purpose
@@ -87,6 +87,57 @@ Max properties:
 - The main loop may implement when no lower worker is configured, or delegate to a lower worker when available.
 - Integration is impossible without an authority approval tied to the current patch hash.
 - “Two checkpoints” does not mean exactly two calls. A `revise` verdict may repeat the same checkpoint within a bounded loop.
+
+### Sealed authority-mode command contract
+
+The external-worker bridge locks authority placement before dispatch. `worker` requires
+exactly one of `--mode lite` or `--mode max` and seals it as `authority_mode` in the
+bundle:
+
+```bash
+python3 scripts/token-saver-route.py worker \
+  --repo /absolute/path/to/repository \
+  --temp-parent /absolute/path/to/existing-temp-parent \
+  --route claude-kimi-bypass \
+  --task /absolute/path/to/task.json \
+  --mode lite
+```
+
+The sealed `authority_mode` cannot switch, downgrade, or be reinterpreted inside the
+invocation. A Lite bundle accepts only inline main-loop authority. The selected main
+loop performs the reasoning and complete review while the secondary worker performs
+the bounded implementation:
+
+```bash
+python3 scripts/token-saver-route.py review --inline \
+  --main-fingerprint <provider:model:variant> \
+  --manifest <manifest> \
+  --context /absolute/path/to/review-context.json
+```
+
+A Max bundle rejects `--inline` and requires an eligible external reviewer selected by
+`--profile` and `--route`. The main loop may be a lower-tier model and may either
+implement or delegate further to a still-lower worker:
+
+```bash
+python3 scripts/token-saver-route.py review --profile /absolute/path/to/profile.json \
+  --route <reviewer-route> \
+  --main-fingerprint <provider:model:variant> \
+  --manifest <manifest> \
+  --context /absolute/path/to/review-context.json
+```
+
+An approving review writes the final-review receipt into the invocation. Integration
+accepts only the manifest and reloads that sealed receipt; callers no longer create or
+pass an approval JSON file:
+
+```bash
+python3 scripts/token-saver-route.py integrate <manifest>
+```
+
+This command and artifact contract is identical when the host main loop is Claude Code
+or Codex. Provider and model names remain route/profile data rather than state-machine
+branches.
 
 ## Mode Resolution
 
@@ -196,6 +247,7 @@ RESOLVE
 - Native host agents are preferred when they support the required model and permissions.
 - CLI routes are used when native routing cannot select the desired model or provider.
 - External write-capable workers run in disposable worktrees based on a recorded commit.
+- The sealed external-worker CLI requires `--mode lite|max` and persists that exact `authority_mode`; later states reject any attempt to change it.
 
 #### GATE
 
@@ -227,8 +279,8 @@ The canonical task patch uses a sorted path manifest. Text changes use normalize
 
 #### AUTHORITY_FINAL_CHECK
 
-- In Lite, the main loop issues the final decision inline.
-- In Max, the reviewer receives the approved plan, acceptance criteria, complete canonical task patch, status and scope audit, gate commands and exit codes, patch hash, and preliminary verdict.
+- In Lite, the main loop issues the final decision inline through `review --inline`; an external profile or route is invalid for that sealed bundle.
+- In Max, `review` requires an external `--profile` and `--route`; `--inline` is invalid. The reviewer receives the approved plan, acceptance criteria, complete canonical task patch, status and scope audit, gate commands and exit codes, patch hash, and preliminary verdict.
 - The canonical task patch includes every in-scope staged, unstaged, and untracked change plus every worker-created file. It also includes a manifest of out-of-scope repository changes so scope violations cannot be hidden.
 - Large patches may be split into numbered chunks only when the reviewer receives every chunk, the complete file manifest, per-chunk hashes, and the total canonical patch hash. “Design-relevant hunks only” is not an acceptable substitute.
 - `approve` authorizes only the supplied patch hash.
@@ -237,6 +289,7 @@ The canonical task patch uses a sorted path manifest. Text changes use normalize
 
 #### INTEGRATE
 
+- Load the invocation-bound final-review receipt through the manifest. `integrate` accepts no caller-supplied approval file.
 - Recompute the patch hash immediately before integration.
 - Any change after approval invalidates the verdict and returns to `AUTHORITY_FINAL_CHECK`.
 - Confirm the destination snapshot still matches the snapshot used to construct the reviewed patch. A changed destination returns `destination_changed`; Token Saver does not overwrite, reset, or auto-resolve it.
@@ -289,9 +342,15 @@ Example:
 
 Command routes use argument arrays and direct process execution. They never pass user configuration through `eval`, `sh -c`, or interpolated command strings.
 
-Credentials are not stored in `.token-saver.json`. Adapters use existing CLI authentication or an environment variable named by the provider configuration. Setup and diagnostics print only variable names and configured/unconfigured state.
+Credentials are not stored in `.token-saver.json`. Adapters use existing CLI authentication or an environment variable named by the provider configuration. Setup and diagnostics print only variable names and configured/unconfigured state. Prompts, logs, manifests, and review packets omit credential values, but the provider client process still receives the route credentials required to call its endpoint. Operators should use short-lived, narrowly scoped tokens and trusted provider executables. The filesystem sandbox and model-tool allowlist cannot prevent a malicious or compromised provider binary from sending credentials or readable data over the provider connection it is allowed to use.
 
 ## Cross-Platform Adapters
+
+Claude Code and Codex consume the same route, fingerprint, manifest, bundle, review
+context, receipt, and integration contracts. Verified external-writer backends cover
+macOS and Linux, including Linux under WSL. Native Windows has no verified external
+writer backend and returns `sandbox_unavailable` for that route; host-native Claude
+Code and Codex agents remain available there.
 
 ### Claude Code
 
@@ -306,7 +365,7 @@ Credentials are not stored in `.token-saver.json`. Adapters use existing CLI aut
 - Custom agents may pin model, reasoning effort, sandbox mode, and role instructions.
 - Ship installable examples for authority reviewer, balanced implementer, mechanic, and scout roles.
 - Use `codex exec --model` only when a native agent route is unavailable or an isolated non-interactive run is required.
-- Preflight requires a Codex version supporting the selected model. GPT-5.6 Sol requires Codex CLI 0.144.0 or later.
+- Preflight treats `codex --version` as diagnostics only and verifies the selected model, custom-agent surface, reasoning setting, and sandbox capability live. No numeric CLI version alone proves that a model is available to the current account.
 
 ### Existing Kimi and GLM wrappers
 
@@ -327,7 +386,7 @@ This distinction is mandatory:
 
 Codex custom model providers currently require the Responses API. Kimi's public API currently documents OpenAI-compatible Chat Completions, so the wrapper cannot be converted into a native Codex provider by renaming environment variables. A future Kimi Responses endpoint or an explicit protocol-translating adapter can add that transport later without changing the core state machine.
 
-Reviewer calls through `claude-kimi` are tool-disabled, sandboxed evidence-only calls. Worker calls use the bypass variant only inside an isolated worktree.
+Reviewer calls through `claude-kimi` are tool-disabled, sandboxed evidence-only calls. Worker calls use the bypass variant only inside an isolated worktree. Their model tool surface is limited to `Read`, `Glob`, `Grep`, `Edit`, and `Write`; Bash is disabled, Web and MCP are unavailable, and declared gates are executed by the Token Saver host after the model call.
 
 ### External reviewer enforcement contract
 
@@ -335,7 +394,7 @@ External reviewer transports must enforce read-only behavior independently of th
 
 1. Create a dedicated temporary evidence directory outside the repository and any worker worktree.
 2. Put only the canonical review packet in that directory; do not provide repository paths or credentials in the packet.
-3. Start the reviewer with no write-capable, shell, browser, MCP, or repository tools. For the current Claude wrapper this means safe mode, no session persistence, plan permissions, and an empty tool allowlist. Codex CLI reviewers use an ephemeral read-only sandbox.
+3. Start the reviewer with no write-capable, shell, browser, MCP, or repository tools. For the current Claude wrapper this means safe mode, no session persistence, plan permissions, and an empty tool allowlist. Codex CLI reviewers use an ephemeral read-only sandbox. The review packet contains no credentials, although an external provider client may still receive its own narrowly scoped route credentials at the process boundary.
 4. Send the packet through process stdin using a direct argument array, not a shell-expanded command string.
 5. Require a structured verdict matching the reviewer result schema.
 6. Record the evidence-directory manifest before and after the call. Any mutation, unexpected child artifact, timeout, or non-zero exit returns `transport_error` and cannot approve.
@@ -532,6 +591,8 @@ The obsolete artifact is removed from the canonical distribution.
 
 ### State machine
 
+- `worker` rejects a missing mode and seals exactly `lite` or `max` as immutable `authority_mode`.
+- Lite rejects external reviewer arguments; Max rejects inline review and requires an external profile and route.
 - Max plan approval occurs before dispatch.
 - Max final approval occurs before integration.
 - A final `revise` verdict loops through implementation, gate, audit, and re-review.
@@ -550,8 +611,10 @@ The obsolete artifact is removed from the canonical distribution.
 
 - JSON parsing rejects unknown schema versions and invalid capabilities.
 - CLI commands execute as argument arrays without shell evaluation.
+- External worker model tools are exactly `Read`, `Glob`, `Grep`, `Edit`, and `Write`; Bash, Web, and MCP remain unavailable, while host-run gates still execute.
 - Tokens containing quotes, whitespace, backslashes, or shell syntax remain data and are never executed.
 - Logs redact configured credential variables.
+- Tests prove credentials do not enter prompts or evidence while documenting that the trusted provider client still receives them and that network exfiltration by a malicious provider binary is outside the sandbox guarantee.
 - Legacy credential migration is non-destructive and idempotent.
 
 ### Repository and package
@@ -584,6 +647,7 @@ The redesign is complete when:
 5. Codex can use native lower-cost OpenAI custom agents and can dispatch the existing Kimi/GLM wrappers as external routes.
 6. Claude Code retains native routing and external wrapper support through adapter documentation.
 7. Max cannot bypass either authority checkpoint or integrate a stale patch.
-8. External write-capable workers are isolated from the user's current worktree.
-9. Historical benchmark claims are accurately scoped.
-10. Automated validation passes and the new `.skill` package is reproducible and internally complete.
+8. A sealed Lite/Max authority mode cannot be switched before review or integration, and integration accepts only the manifest containing its sealed review receipt.
+9. External write-capable workers are isolated from the user's current worktree on macOS and Linux/WSL; native Windows fails closed and retains host-native agent support.
+10. Historical benchmark claims are accurately scoped.
+11. Automated validation passes and the new `.skill` package is reproducible and internally complete.

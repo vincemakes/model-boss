@@ -923,7 +923,7 @@ class BuiltInProfileTests(unittest.TestCase):
             "openai": {
                 "gpt-5.6-sol": "high",
                 "gpt-5.6-terra": "medium",
-                "gpt-5.6-luna": "default",
+                "gpt-5.6-luna": "low",
             },
             "kimi": {"kimi-k3": "default"},
         }

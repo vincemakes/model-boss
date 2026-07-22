@@ -28,13 +28,14 @@
       "transport": "host-subagent",
       "band": "fast",
       "roles": [
+        "worker",
         "scout",
         "mechanic"
       ],
       "read_only": false,
       "model": "gpt-5.6-luna",
       "provider_family": "openai",
-      "variant": "default"
+      "variant": "low"
     }
   },
   "preferences": {
@@ -42,7 +43,8 @@
       "gpt-5.6-sol"
     ],
     "workers": [
-      "gpt-5.6-terra"
+      "gpt-5.6-terra",
+      "gpt-5.6-luna"
     ],
     "scouts": [
       "gpt-5.6-luna"

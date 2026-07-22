@@ -317,6 +317,220 @@ def _read_private_json(path: Path) -> dict[str, object]:
         raise
 
 
+_ACTIVE_MANIFEST_KEYS = frozenset(
+    {
+        "schema_version",
+        "invocation_id",
+        "repository_path",
+        "repository_identity",
+        "temp_parent",
+        "temp_parent_identity",
+        "invocation_root",
+        "invocation_root_identity",
+        "route_state_identity",
+        "evidence_identity",
+        "worktree_path",
+        "worktree_registration_path",
+        "route_state_path",
+        "evidence_path",
+        "plan_evidence_path",
+        "final_evidence_path",
+        "delta_bundle_path",
+        "manifest_path",
+        "markers",
+        "marker_identities",
+        "state",
+    }
+)
+
+
+def _manifest_text(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be non-empty text")
+    try:
+        encoded = value.encode("utf-8", "strict")
+    except UnicodeError:
+        raise ValueError(f"{field_name} must be strict UTF-8") from None
+    if b"\0" in encoded or any(byte < 0x20 or byte == 0x7F for byte in encoded):
+        raise ValueError(f"{field_name} contains unsafe control characters")
+    return value
+
+
+def _manifest_path_value(value: object, field_name: str) -> Path:
+    path = Path(_manifest_text(value, field_name))
+    if not path.is_absolute() or path.resolve(strict=False) != path:
+        raise ValueError(f"{field_name} is not a canonical absolute path")
+    return path
+
+
+def _manifest_identity(
+    value: object,
+    field_name: str,
+) -> tuple[int, int]:
+    if not isinstance(value, dict) or set(value) != {"device", "inode"}:
+        raise ValueError(f"{field_name} has an invalid identity schema")
+    device = value["device"]
+    inode = value["inode"]
+    if (
+        type(device) is not int
+        or type(inode) is not int
+        or device < 0
+        or inode <= 0
+    ):
+        raise ValueError(f"{field_name} has an invalid filesystem identity")
+    return device, inode
+
+
+def load_invocation_resources(
+    manifest_path: str | os.PathLike[str],
+    *,
+    require_registered_worktree: bool = False,
+) -> InvocationResources:
+    """Reconstruct and revalidate one exact active invocation manifest.
+
+    The caller supplies only the manifest path.  Every path and filesystem
+    identity is recovered from the private document, then rebound through
+    directory descriptors before the value is returned.  No resource is
+    consumed by this operation.
+    """
+
+    if type(require_registered_worktree) is not bool:
+        raise ValueError("require_registered_worktree must be a boolean")
+    supplied_path = Path(manifest_path)
+    if not supplied_path.is_absolute():
+        raise ValueError("manifest_path must be absolute")
+    try:
+        lexical = os.lstat(supplied_path)
+        resolved = supplied_path.resolve(strict=True)
+    except OSError:
+        raise ValueError("manifest_path is unavailable") from None
+    if (
+        resolved != supplied_path
+        or stat.S_ISLNK(lexical.st_mode)
+        or not stat.S_ISREG(lexical.st_mode)
+    ):
+        raise ValueError("manifest_path must be a canonical regular file")
+
+    try:
+        manifest = _read_private_json(supplied_path)
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as error:
+        raise ValueError("manifest_path is not a valid private manifest") from error
+    if set(manifest) != _ACTIVE_MANIFEST_KEYS:
+        raise ValueError("manifest has an invalid schema")
+    if type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1:
+        raise ValueError("manifest has an unsupported schema version")
+    if manifest["state"] != "active":
+        raise ValueError("manifest is not active")
+
+    repository_identity = _manifest_identity(
+        manifest["repository_identity"], "repository_identity"
+    )
+    temp_parent_identity = _manifest_identity(
+        manifest["temp_parent_identity"], "temp_parent_identity"
+    )
+    invocation_root_identity = _manifest_identity(
+        manifest["invocation_root_identity"], "invocation_root_identity"
+    )
+    route_state_identity = _manifest_identity(
+        manifest["route_state_identity"], "route_state_identity"
+    )
+    evidence_identity = _manifest_identity(
+        manifest["evidence_identity"], "evidence_identity"
+    )
+
+    marker_values = manifest["markers"]
+    identity_values = manifest["marker_identities"]
+    if not isinstance(marker_values, list) or not isinstance(identity_values, list):
+        raise ValueError("manifest markers have an invalid schema")
+    marker_paths = tuple(
+        _manifest_path_value(value, "marker_path") for value in marker_values
+    )
+    marker_identities = tuple(
+        _manifest_identity(value, "marker_identity") for value in identity_values
+    )
+
+    resources = InvocationResources(
+        invocation_id=_manifest_text(manifest["invocation_id"], "invocation_id"),
+        repository_path=_manifest_path_value(
+            manifest["repository_path"], "repository_path"
+        ),
+        temp_parent=_manifest_path_value(manifest["temp_parent"], "temp_parent"),
+        invocation_root=_manifest_path_value(
+            manifest["invocation_root"], "invocation_root"
+        ),
+        worktree_path=_manifest_path_value(
+            manifest["worktree_path"], "worktree_path"
+        ),
+        worktree_registration_path=_manifest_path_value(
+            manifest["worktree_registration_path"],
+            "worktree_registration_path",
+        ),
+        route_state_path=_manifest_path_value(
+            manifest["route_state_path"], "route_state_path"
+        ),
+        evidence_path=_manifest_path_value(
+            manifest["evidence_path"], "evidence_path"
+        ),
+        plan_evidence_path=_manifest_path_value(
+            manifest["plan_evidence_path"], "plan_evidence_path"
+        ),
+        final_evidence_path=_manifest_path_value(
+            manifest["final_evidence_path"], "final_evidence_path"
+        ),
+        delta_bundle_path=_manifest_path_value(
+            manifest["delta_bundle_path"], "delta_bundle_path"
+        ),
+        manifest_path=_manifest_path_value(
+            manifest["manifest_path"], "manifest_path"
+        ),
+        marker_paths=marker_paths,
+        repository_device=repository_identity[0],
+        repository_inode=repository_identity[1],
+        temp_parent_device=temp_parent_identity[0],
+        temp_parent_inode=temp_parent_identity[1],
+        invocation_root_device=invocation_root_identity[0],
+        invocation_root_inode=invocation_root_identity[1],
+        route_state_device=route_state_identity[0],
+        route_state_inode=route_state_identity[1],
+        evidence_device=evidence_identity[0],
+        evidence_inode=evidence_identity[1],
+        manifest_device=lexical.st_dev,
+        manifest_inode=lexical.st_ino,
+        marker_identities=marker_identities,
+    )
+    if resources.manifest_path != supplied_path:
+        raise ValueError("supplied manifest does not match its recorded path")
+
+    anchor: _RootAnchor | None = None
+    parent_fd: int | None = None
+    try:
+        _validate_base_identity(resources)
+        parent_fd = _open_parent_anchor(resources)
+        anchor = _open_root_anchor(resources, parent_fd, allow_missing=False)
+        if anchor is None:  # pragma: no cover - allow_missing is false.
+            raise ValueError("invocation_root is unavailable")
+        _validate_active_resources(resources, anchor)
+        if require_registered_worktree:
+            registered = _registered_worktrees(resources.repository_path)
+            _validate_active_resources(resources, anchor)
+            if resources.worktree_registration_path not in registered:
+                raise ValueError("invocation worktree is not registered")
+        return resources
+    except (
+        json.JSONDecodeError,
+        OSError,
+        RuntimeError,
+        subprocess.CalledProcessError,
+        TypeError,
+        ValueError,
+    ) as error:
+        raise ValueError("invocation manifest validation failed") from error
+    finally:
+        _close_root_anchor(anchor)
+        if parent_fd is not None:
+            os.close(parent_fd)
+
+
 def _require_direct_child_name(name: str) -> None:
     if name in {"", ".", ".."} or Path(name).name != name:
         raise ValueError("private file is not an exact directory child")

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/vincemakes/fable-token-saver/config/token-saver.schema.json",
+  "$id": "https://github.com/vincemakes/token-saver/config/token-saver.schema.json",
   "title": "Token Saver configuration",
   "description": "Credential-free, model-independent Token Saver route configuration.",
   "type": "object",

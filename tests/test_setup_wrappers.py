@@ -25,9 +25,52 @@ EXPECTED = {
     "claude-glm-turbo": ("glm-turbo", "safe"),
     "claude-glm-turbo-bypass": ("glm-turbo", "sandboxed-worker"),
 }
+ROOT = Path(__file__).resolve().parents[1]
+SETUP_SCRIPT = ROOT / "scripts" / "setup-model-providers.sh"
 
 
 class WrapperTests(unittest.TestCase):
+    def test_fresh_wrapper_only_setup_needs_no_legacy_or_new_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as root_text:
+            root = Path(root_text)
+            home = root / "home"
+            home.mkdir()
+            config_root = root / "config"
+            install = root / "bin"
+            completed = subprocess.run(
+                (
+                    "bash",
+                    os.fspath(SETUP_SCRIPT),
+                    "--install-path",
+                    os.fspath(install),
+                ),
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    "HOME": os.fspath(home),
+                    "XDG_CONFIG_HOME": os.fspath(config_root),
+                },
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(
+                completed.returncode,
+                0,
+                completed.stdout + completed.stderr,
+            )
+            self.assertEqual(
+                json.loads(completed.stdout)["setup_status"],
+                "wrappers_configured",
+            )
+            self.assertEqual({path.name for path in install.iterdir()}, set(EXPECTED))
+            self.assertFalse(config_root.exists())
+            self.assertFalse(
+                (home / ".claude" / "fable-token-saver" / "providers.env").exists()
+            )
+
     def test_exact_six_static_wrappers_and_modes(self) -> None:
         with tempfile.TemporaryDirectory() as root_text:
             root = Path(root_text)

@@ -62,7 +62,7 @@ class SandboxPolicyTests(unittest.TestCase):
         self.assertEqual(policy.readable_roots, (self.readable,))
         self.assertEqual(policy.writable_roots, (self.worktree, self.route_state))
 
-    def test_rejects_equality_and_both_overlap_directions_across_root_classes(self) -> None:
+    def test_rejects_unsafe_overlap_but_allows_a_nested_read_only_worktree_file(self) -> None:
         parent = self._directory("overlap")
         child = self._directory("overlap/child")
         separate_worktree = self._directory("separate-worktree")
@@ -74,12 +74,6 @@ class SandboxPolicyTests(unittest.TestCase):
                 "worktree_root": parent,
                 "route_state_root": separate_state,
                 "readable_roots": (parent,),
-                "protected_roots": (separate_protected,),
-            },
-            {
-                "worktree_root": parent,
-                "route_state_root": separate_state,
-                "readable_roots": (child,),
                 "protected_roots": (separate_protected,),
             },
             {
@@ -129,6 +123,15 @@ class SandboxPolicyTests(unittest.TestCase):
             with self.subTest(values=values):
                 with self.assertRaisesRegex(ValueError, "overlap"):
                     SandboxPolicy(network_required=False, **values)
+
+        nested_read_only = SandboxPolicy(
+            worktree_root=parent,
+            route_state_root=separate_state,
+            readable_roots=(child,),
+            protected_roots=(separate_protected,),
+            network_required=False,
+        )
+        self.assertEqual(nested_read_only.read_only_nested_roots, (child,))
 
     def test_rejects_overlapping_writable_roots(self) -> None:
         nested_state = self._directory("worktree/state")
@@ -217,6 +220,11 @@ class SandboxRenderingTests(unittest.TestCase):
         self.assertIn('(import "system.sb")', profile)
         self.assertIn("(allow process*)", profile)
         self.assertIn("(allow file-read*", profile)
+        read_line = next(
+            line for line in profile.splitlines() if line.startswith("(allow file-read*")
+        )
+        self.assertIn(os.fspath(self.worktree), read_line)
+        self.assertIn(os.fspath(self.state), read_line)
         write_line = next(
             line for line in profile.splitlines() if line.startswith("(allow file-write*")
         )
@@ -225,6 +233,38 @@ class SandboxRenderingTests(unittest.TestCase):
         self.assertIn(os.fspath(self.state), write_line)
         self.assertNotIn(os.fspath(self.protected), profile)
         self.assertNotIn("(allow network*)", profile)
+
+    def test_nested_readable_git_pointer_is_explicitly_write_denied(self) -> None:
+        git_pointer = self.worktree / ".git"
+        git_pointer.write_text("gitdir: isolated\n", encoding="utf-8")
+        policy = SandboxPolicy(
+            worktree_root=self.worktree,
+            route_state_root=self.state,
+            readable_roots=(git_pointer,),
+            protected_roots=(self.protected,),
+            network_required=False,
+        )
+
+        profile = render_macos_profile(policy, self.executable)
+        deny_line = next(
+            line for line in profile.splitlines() if line.startswith("(deny file-write*")
+        )
+        self.assertIn(os.fspath(git_pointer), deny_line)
+
+        argv = build_bwrap_argv(
+            policy,
+            self.executable,
+            (os.fspath(self.executable), "--version"),
+            bwrap_executable="/usr/bin/bwrap",
+        )
+        worktree_bind = argv.index(os.fspath(self.worktree))
+        final_git_bind = max(
+            index
+            for index, member in enumerate(argv)
+            if member == os.fspath(git_pointer)
+        )
+        self.assertGreater(final_git_bind, worktree_bind)
+        self.assertEqual(argv[final_git_bind - 2], "--ro-bind")
 
     def test_macos_profile_adds_network_only_for_a_network_route(self) -> None:
         network_policy = SandboxPolicy(

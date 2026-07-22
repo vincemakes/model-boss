@@ -35,6 +35,13 @@ The optional worker may be lower-cost or omitted. This produces either two level
 (reviewer + main loop) or three (reviewer + main loop + worker). The selected main
 loop never changes.
 
+The resolved topology is not a cosmetic label. The worker entry seals an
+`authority_mode` of `lite` or `max` into the invocation-bound delta bundle. That
+field is covered by the bundle hash and external seal receipt, so the invocation
+cannot switch, downgrade, or upgrade authority paths after worker execution. A Lite
+bundle accepts only inline main-loop authority; a Max bundle accepts only a distinct
+external reviewer that passes the current identity and read-only preflight.
+
 ## State and checkpoint contract
 
 The canonical order is:
@@ -94,6 +101,39 @@ The final packet contains the approved plan, acceptance criteria, full file mani
 canonical patch bytes or numbered complete chunks, per-chunk and total hashes, scope
 audit, gate results, main-loop verdict, and the three-hash tuple. Selective “important
 hunks” are insufficient.
+
+The runtime constructs that packet from the sealed bundle; callers cannot substitute
+an arbitrary packet. It also binds `authority_mode`, invocation ID, sealed-bundle
+SHA-256, approval-binding hash, and all three evidence hashes. A reviewer verdict must
+echo both the approval-binding hash and the SHA-256 of the exact packet bytes.
+
+## Final authority receipt
+
+Public integration never accepts a caller-authored approval JSON file. An approved
+final checkpoint creates one private, mode-bound, invocation-bound receipt containing:
+
+- `authority_mode`, invocation ID, bundle SHA-256, and exact review-packet SHA-256
+- the three evidence hashes and their recomputed approval-binding hash
+- the main-loop fingerprint
+- the reviewer route, canonical fingerprint, identity-evidence source, and effective
+  read-only proof for Max, or the inline-main-loop marker for Lite
+- the strict approve decision and an empty requested-change set
+
+The receipt is created once, is not overwritten, and is revalidated against the
+current sealed bundle before integration. `integrate` receives only the invocation
+manifest; a missing, stale, wrong-mode, caller-supplied, or tampered receipt blocks the
+transaction.
+
+## External provider boundary
+
+The sandboxed Claude-compatible worker exposes only `Read`, `Glob`, `Grep`, `Edit`,
+and `Write` model tools. Bash/shell, Web, MCP, slash commands, and session persistence
+are unavailable to the model, while trusted gate commands run separately under host
+control with provider credentials removed. The provider client process must still
+receive the selected route credential to call its API. Use short-lived, narrowly
+scoped credentials: filesystem sandboxing and output redaction cannot prevent a
+malicious or compromised provider binary from misusing a credential over its allowed
+network connection.
 
 ## Revision loop
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import tomllib
 import unittest
@@ -23,7 +24,7 @@ CODEX_MODELS = {
     "reviewer": ("gpt-5.6-sol", "high", "read-only"),
     "implementer": ("gpt-5.6-terra", "medium", "workspace-write"),
     "mechanic": ("gpt-5.6-luna", "low", "workspace-write"),
-    "scout": ("gpt-5.6-terra", "low", "read-only"),
+    "scout": ("gpt-5.6-luna", "low", "read-only"),
 }
 
 CODEX_KEYS = {
@@ -99,6 +100,35 @@ class AgentAssetTests(unittest.TestCase):
                 self.assertIn("host main loop remains inherited", data["developer_instructions"].lower())
                 names.add(data["name"])
         self.assertEqual(len(names), len(ROLES))
+
+    def test_codex_assets_match_openai_profile_routes_and_preferences(self) -> None:
+        profile = json.loads(
+            (ROOT / "references" / "profiles" / "openai.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        expected = {
+            "reviewer": ("gpt-5.6-sol", "reviewer", "reviewers"),
+            "implementer": ("gpt-5.6-terra", "worker", "workers"),
+            "mechanic": ("gpt-5.6-luna", "mechanic", "mechanics"),
+            "scout": ("gpt-5.6-luna", "scout", "scouts"),
+        }
+        for asset_role, (route_id, route_role, preference) in expected.items():
+            asset = tomllib.loads(
+                (AGENTS / "codex" / f"{asset_role}.toml").read_text(
+                    encoding="utf-8"
+                )
+            )
+            route = profile["routes"][route_id]
+            with self.subTest(asset_role=asset_role):
+                self.assertEqual(asset["model"], route["model"])
+                self.assertEqual(asset["model_reasoning_effort"], route["variant"])
+                self.assertIn(route_role, route["roles"])
+                self.assertIn(route_id, profile["preferences"][preference])
+
+        luna = profile["routes"]["gpt-5.6-luna"]
+        self.assertEqual(set(luna["roles"]), {"worker", "mechanic", "scout"})
+        self.assertIn("gpt-5.6-luna", profile["preferences"]["workers"])
 
     def test_reviewer_assets_are_evidence_only(self) -> None:
         generic = (AGENTS / "prompts" / "reviewer.md").read_text(encoding="utf-8")

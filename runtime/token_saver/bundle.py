@@ -29,6 +29,7 @@ except ImportError:  # pragma: no cover - native Windows is rejected explicitly.
 
 from . import resources as resources_module
 from .evidence import (
+    ApprovalBinding,
     EvidenceRecord,
     PrivateRecord,
     SourceSnapshot,
@@ -145,6 +146,137 @@ class SealedDeltaBundle:
     metadata: DeltaBundleMetadata
     snapshot: SourceSnapshot
     delta: WorkerDelta
+    authority_mode: str = "lite"
+    gates: tuple[SealedGateEvidence, ...] = ()
+
+
+@dataclass(frozen=True)
+class SealedGateEvidence:
+    """Trusted gate result persisted with the exact worker delta."""
+
+    argv: tuple[str, ...]
+    cwd: str
+    status: str
+    exit_code: int
+    stdout_hash: str
+    stderr_hash: str
+    duration_milliseconds: int
+
+    def __post_init__(self) -> None:
+        argv = tuple(self.argv)
+        if (
+            not argv
+            or len(argv) > 128
+            or not all(
+                isinstance(member, str)
+                and member
+                and "\0" not in member
+                and len(member) <= 16_384
+                for member in argv
+            )
+        ):
+            raise ValueError("sealed gate argv is invalid")
+        if not isinstance(self.cwd, str) or not self.cwd or "\0" in self.cwd:
+            raise ValueError("sealed gate cwd is invalid")
+        cwd = Path(self.cwd)
+        if cwd.is_absolute() or ".." in cwd.parts:
+            raise ValueError("sealed gate cwd must be repository-relative")
+        if self.status != "ok" or type(self.exit_code) is not int or self.exit_code != 0:
+            raise ValueError("only successful trusted gates may be sealed")
+        for field_name in ("stdout_hash", "stderr_hash"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+                raise ValueError(f"{field_name} must be a lower-case SHA-256 digest")
+        if (
+            type(self.duration_milliseconds) is not int
+            or not 0 <= self.duration_milliseconds <= 3_600_000
+        ):
+            raise ValueError("sealed gate duration is invalid")
+        object.__setattr__(self, "argv", argv)
+
+
+@dataclass(frozen=True)
+class FinalReviewReceipt:
+    """One approval bound to an invocation, packet, bundle, and reviewer proof."""
+
+    schema_version: int
+    authority_mode: str
+    invocation_id: str
+    bundle_sha256: str
+    review_packet_sha256: str
+    source_snapshot_hash: str
+    worker_delta_hash: str
+    projected_task_patch_hash: str
+    approval_binding_hash: str
+    decision: str
+    reviewer_route_id: str
+    reviewer_fingerprint: str
+    fingerprint_evidence_source: str
+    reviewer_read_only_enforced: bool
+    main_fingerprint: str
+    message: str
+    requested_changes: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.schema_version != 1:
+            raise ValueError("unsupported final review receipt version")
+        for field_name in (
+            "bundle_sha256",
+            "review_packet_sha256",
+            "source_snapshot_hash",
+            "worker_delta_hash",
+            "projected_task_patch_hash",
+            "approval_binding_hash",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+                raise ValueError(f"{field_name} must be a lower-case SHA-256 digest")
+        binding = ApprovalBinding(
+            source_snapshot_hash=self.source_snapshot_hash,
+            worker_delta_hash=self.worker_delta_hash,
+            projected_task_patch_hash=self.projected_task_patch_hash,
+        )
+        if binding.canonical_hash != self.approval_binding_hash:
+            raise ValueError("final review receipt binding hash is inconsistent")
+        if self.authority_mode not in {"lite", "max"}:
+            raise ValueError("final review receipt authority mode is invalid")
+        if self.decision != "approve" or self.requested_changes:
+            raise ValueError("only an approval without requested changes can be sealed")
+        for field_name in (
+            "invocation_id",
+            "reviewer_route_id",
+            "fingerprint_evidence_source",
+            "message",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip() or "\0" in value:
+                raise ValueError(f"{field_name} must be non-empty safe text")
+        for field_name in ("reviewer_fingerprint", "main_fingerprint"):
+            value = getattr(self, field_name)
+            if (
+                not isinstance(value, str)
+                or value != value.lower()
+                or len(value.split(":")) != 3
+                or any(not part for part in value.split(":"))
+            ):
+                raise ValueError(f"{field_name} must be a canonical fingerprint")
+        if self.authority_mode == "max":
+            if self.reviewer_fingerprint == self.main_fingerprint:
+                raise ValueError("Max reviewer fingerprint must differ from the main loop")
+            if self.reviewer_read_only_enforced is not True:
+                raise ValueError("Max approval requires enforced read-only review")
+        else:
+            if (
+                self.reviewer_route_id != "inline-main-loop"
+                or self.reviewer_fingerprint != self.main_fingerprint
+                or self.fingerprint_evidence_source != "host-metadata"
+                or self.reviewer_read_only_enforced is not False
+            ):
+                raise ValueError("Lite approval must remain inline in the main loop")
+        changes = tuple(self.requested_changes)
+        if not all(isinstance(change, str) and change.strip() for change in changes):
+            raise ValueError("requested_changes must contain non-empty text")
+        object.__setattr__(self, "requested_changes", changes)
 
 
 def _canonical_json(value: object) -> bytes:
@@ -531,8 +663,101 @@ _HASH_KEYS = frozenset(
     }
 )
 _ENVELOPE_KEYS = frozenset(
-    {"binding", "hashes", "schema_version", "source_snapshot", "worker_delta"}
+    {
+        "authority_mode",
+        "binding",
+        "gates",
+        "hashes",
+        "schema_version",
+        "source_snapshot",
+        "worker_delta",
+    }
 )
+_GATE_KEYS = frozenset(
+    {
+        "argv",
+        "cwd",
+        "duration_milliseconds",
+        "exit_code",
+        "status",
+        "stderr_hash",
+        "stdout_hash",
+    }
+)
+
+
+def _canonical_gates(
+    gates: tuple[SealedGateEvidence, ...] | list[SealedGateEvidence],
+) -> tuple[SealedGateEvidence, ...]:
+    if not isinstance(gates, (tuple, list)) or not all(
+        isinstance(gate, SealedGateEvidence) for gate in gates
+    ):
+        raise BundleError("bundle gates must contain SealedGateEvidence values")
+    if len(gates) > 128:
+        raise BundleError("bundle contains too many gates")
+    try:
+        return tuple(
+            SealedGateEvidence(
+                argv=gate.argv,
+                cwd=gate.cwd,
+                status=gate.status,
+                exit_code=gate.exit_code,
+                stdout_hash=gate.stdout_hash,
+                stderr_hash=gate.stderr_hash,
+                duration_milliseconds=gate.duration_milliseconds,
+            )
+            for gate in gates
+        )
+    except (TypeError, ValueError) as exc:
+        raise BundleError(f"bundle gate evidence is invalid: {exc}") from exc
+
+
+def _encode_gate(gate: SealedGateEvidence) -> dict[str, object]:
+    return {
+        "argv": list(gate.argv),
+        "cwd": gate.cwd,
+        "duration_milliseconds": gate.duration_milliseconds,
+        "exit_code": gate.exit_code,
+        "status": gate.status,
+        "stderr_hash": gate.stderr_hash,
+        "stdout_hash": gate.stdout_hash,
+    }
+
+
+def _decode_gate(value: object, label: str) -> SealedGateEvidence:
+    gate = _expect_keys(value, _GATE_KEYS, label)
+    argv_values = _expect_list(gate["argv"], f"{label}.argv")
+    if not all(type(member) is str for member in argv_values):
+        raise BundleError(f"{label}.argv must contain only strings")
+    try:
+        return SealedGateEvidence(
+            argv=tuple(argv_values),  # type: ignore[arg-type]
+            cwd=_expect_string(gate["cwd"], f"{label}.cwd"),
+            status=_expect_string(gate["status"], f"{label}.status"),
+            exit_code=_expect_integer(gate["exit_code"], f"{label}.exit_code"),
+            stdout_hash=_expect_sha256(
+                gate["stdout_hash"], f"{label}.stdout_hash"
+            ),
+            stderr_hash=_expect_sha256(
+                gate["stderr_hash"], f"{label}.stderr_hash"
+            ),
+            duration_milliseconds=_expect_integer(
+                gate["duration_milliseconds"],
+                f"{label}.duration_milliseconds",
+            ),
+        )
+    except ValueError as exc:
+        raise BundleError(f"{label} is not valid green gate evidence: {exc}") from exc
+
+
+def _decode_gates(value: object) -> tuple[SealedGateEvidence, ...]:
+    values = _expect_list(value, "gates")
+    if len(values) > 128:
+        raise BundleError("bundle contains too many gates")
+    return tuple(
+        _decode_gate(gate, f"gates[{index}]")
+        for index, gate in enumerate(values)
+    )
 
 
 def _encode_binding(resources: InvocationResources) -> dict[str, object]:
@@ -583,10 +808,17 @@ def _build_envelope(
     resources: InvocationResources,
     snapshot: SourceSnapshot,
     delta: WorkerDelta,
+    gates: tuple[SealedGateEvidence, ...] = (),
+    authority_mode: str = "lite",
 ) -> tuple[dict[str, object], tuple[str, str, str]]:
     hashes = _evidence_hashes(snapshot, delta)
+    canonical_gates = _canonical_gates(gates)
+    if authority_mode not in {"lite", "max"}:
+        raise BundleError("bundle authority_mode must be lite or max")
     envelope: dict[str, object] = {
+        "authority_mode": authority_mode,
         "binding": _encode_binding(resources),
+        "gates": [_encode_gate(gate) for gate in canonical_gates],
         "hashes": {
             "projected_task_patch_sha256": hashes[2],
             "source_snapshot_sha256": hashes[0],
@@ -1103,17 +1335,25 @@ def seal_delta_bundle(
     resources: InvocationResources,
     snapshot: SourceSnapshot,
     delta: WorkerDelta,
+    *,
+    gates: tuple[SealedGateEvidence, ...] | list[SealedGateEvidence] = (),
+    authority_mode: str = "lite",
 ) -> DeltaBundleMetadata:
     """Persist a worker result exactly once as a private immutable JSON bundle."""
 
     _require_supported_platform()
     canonical_snapshot, canonical_delta = _canonical_evidence(snapshot, delta)
+    canonical_gates = _canonical_gates(gates)
+    if authority_mode not in {"lite", "max"}:
+        raise BundleError("bundle authority_mode must be lite or max")
     if not isinstance(resources, InvocationResources):
         raise BundleError("resources must be InvocationResources")
     envelope, hashes = _build_envelope(
         resources,
         canonical_snapshot,
         canonical_delta,
+        canonical_gates,
+        authority_mode,
     )
     raw = _canonical_json(envelope)
     if len(raw) > MAX_BUNDLE_BYTES:
@@ -1230,12 +1470,21 @@ def _read_bounded(descriptor: int, expected_size: int) -> bytes:
 def _decode_envelope(
     raw: bytes,
     resources: InvocationResources,
-) -> tuple[SourceSnapshot, WorkerDelta, tuple[str, str, str]]:
+) -> tuple[
+    SourceSnapshot,
+    WorkerDelta,
+    str,
+    tuple[SealedGateEvidence, ...],
+    tuple[str, str, str],
+]:
     envelope = _expect_keys(_decode_json(raw), _ENVELOPE_KEYS, "bundle")
     version = _expect_integer(envelope["schema_version"], "schema_version")
     if version != SCHEMA_VERSION:
         raise BundleError(f"unsupported sealed bundle schema version: {version}")
     _validate_binding(envelope["binding"], resources)
+    authority_mode = _expect_string(envelope["authority_mode"], "authority_mode")
+    if authority_mode not in {"lite", "max"}:
+        raise BundleError("sealed bundle authority_mode is invalid")
     hashes_value = _expect_keys(envelope["hashes"], _HASH_KEYS, "hashes")
     expected_hashes = (
         _expect_sha256(
@@ -1253,6 +1502,7 @@ def _decode_envelope(
     )
     snapshot = _decode_snapshot(envelope["source_snapshot"], "source_snapshot")
     delta = _decode_delta(envelope["worker_delta"], "worker_delta")
+    gates = _decode_gates(envelope["gates"])
     actual_hashes = _evidence_hashes(snapshot, delta)
     labels = (
         "source snapshot hash",
@@ -1264,7 +1514,7 @@ def _decode_envelope(
     ):
         if expected != actual:
             raise BundleError(f"{label} does not match reconstructed evidence")
-    return snapshot, delta, actual_hashes
+    return snapshot, delta, authority_mode, gates, actual_hashes
 
 
 def read_sealed_delta_bundle(resources: InvocationResources) -> SealedDeltaBundle:
@@ -1307,7 +1557,7 @@ def read_sealed_delta_bundle(resources: InvocationResources) -> SealedDeltaBundl
         finally:
             if descriptor is not None:
                 os.close(descriptor)
-        snapshot, delta, hashes = _decode_envelope(raw, resources)
+        snapshot, delta, authority_mode, gates, hashes = _decode_envelope(raw, resources)
         _validate_sealed_receipt(
             anchor.parent_fd,  # type: ignore[attr-defined]
             resources,
@@ -1320,7 +1570,404 @@ def read_sealed_delta_bundle(resources: InvocationResources) -> SealedDeltaBundl
         metadata=_metadata(resources, hashes, raw, file_metadata),
         snapshot=snapshot,
         delta=delta,
+        authority_mode=authority_mode,
+        gates=gates,
     )
+
+
+_FINAL_CONTEXT_KEYS = frozenset(
+    {"acceptance_criteria", "approved_plan", "goal", "main_loop_verdict", "version"}
+)
+_FINAL_RECEIPT_KEYS = frozenset(
+    {
+        "approval_binding_hash",
+        "authority_mode",
+        "bundle_sha256",
+        "decision",
+        "fingerprint_evidence_source",
+        "invocation_id",
+        "main_fingerprint",
+        "message",
+        "projected_task_patch_hash",
+        "requested_changes",
+        "review_packet_sha256",
+        "reviewer_fingerprint",
+        "reviewer_read_only_enforced",
+        "reviewer_route_id",
+        "schema_version",
+        "source_snapshot_hash",
+        "worker_delta_hash",
+    }
+)
+
+
+def _final_context(value: object) -> dict[str, object]:
+    context = _expect_keys(value, _FINAL_CONTEXT_KEYS, "final review context")
+    if _expect_integer(context["version"], "final review context version") != 1:
+        raise BundleError("final review context version is unsupported")
+    for field_name in ("goal", "approved_plan"):
+        text = _expect_string(context[field_name], f"final context.{field_name}")
+        if not text.strip() or "\0" in text or len(text) > 65_536:
+            raise BundleError(f"final context.{field_name} is invalid")
+    verdict = _expect_string(
+        context["main_loop_verdict"], "final context.main_loop_verdict"
+    )
+    if verdict != "approve":
+        raise BundleError("main loop must approve before authority review")
+    criteria = _expect_list(
+        context["acceptance_criteria"], "final context.acceptance_criteria"
+    )
+    if (
+        not criteria
+        or len(criteria) > 256
+        or not all(
+            type(item) is str
+            and bool(item.strip())
+            and "\0" not in item
+            and len(item) <= 16_384
+            for item in criteria
+        )
+    ):
+        raise BundleError("final context acceptance criteria are invalid")
+    return {
+        "acceptance_criteria": list(criteria),
+        "approved_plan": context["approved_plan"],
+        "goal": context["goal"],
+        "main_loop_verdict": verdict,
+        "version": 1,
+    }
+
+
+def _review_file_manifest(section: str, records: tuple[EvidenceRecord, ...]) -> list[object]:
+    result: list[object] = []
+    for index, record in enumerate(records):
+        payload = record.content if record.content is not None else record.canonical_diff
+        result.append(
+            {
+                "index": index,
+                "new_mode": int(record.new_mode),
+                "old_mode": int(record.old_mode),
+                "path_b64": _encode_bytes(record.path),
+                "payload_sha256": hashlib.sha256(payload).hexdigest(),
+                "section": section,
+                "status": int(record.status),
+                "tag": int(record.tag),
+            }
+        )
+    return result
+
+
+def build_final_review_packet(
+    bundle: SealedDeltaBundle,
+    context: object,
+) -> bytes:
+    """Build the complete reviewer-visible packet from one validated sealed bundle."""
+
+    if not isinstance(bundle, SealedDeltaBundle):
+        raise BundleError("final review requires a sealed delta bundle")
+    if not bundle.gates:
+        raise BundleError("final review requires persisted trusted gate evidence")
+    canonical_context = _final_context(context)
+    patch = project_task_patch(bundle.snapshot, bundle.delta)
+    binding = ApprovalBinding(
+        source_snapshot_hash=bundle.metadata.source_snapshot_hash,
+        worker_delta_hash=bundle.metadata.worker_delta_hash,
+        projected_task_patch_hash=bundle.metadata.projected_task_patch_hash,
+    )
+    sections = (
+        ("records", patch.records),
+        ("staged", patch.staged),
+        ("unstaged", patch.unstaged),
+        ("untracked", patch.untracked),
+    )
+    file_manifest = [
+        entry
+        for section, records in sections
+        for entry in _review_file_manifest(section, records)
+    ]
+    packet = {
+        "acceptance_and_plan": canonical_context,
+        "allowed_paths_b64": [
+            _encode_bytes(path) for path in bundle.snapshot.allowed_paths
+        ],
+        "approval_binding_hash": binding.canonical_hash,
+        "authority_mode": bundle.authority_mode,
+        "bundle_sha256": bundle.metadata.bundle_sha256,
+        "canonical_patch_b64": _encode_bytes(encode_canonical_patch(patch)),
+        "file_manifest": file_manifest,
+        "gates": [_encode_gate(gate) for gate in bundle.gates],
+        "invocation_id": bundle.metadata.invocation_id,
+        "patch_sections": {
+            section: [_encode_record(record) for record in records]
+            for section, records in sections
+        },
+        "private_scope_summary": {
+            "aggregate_hash": patch.private_summary.aggregate_hash,
+            "status_counts": [
+                [int(status), count]
+                for status, count in patch.private_summary.status_counts
+            ],
+        },
+        "projected_task_patch_hash": bundle.metadata.projected_task_patch_hash,
+        "purpose": "final-review",
+        "source_snapshot_hash": bundle.metadata.source_snapshot_hash,
+        "version": 1,
+        "worker_delta_hash": bundle.metadata.worker_delta_hash,
+    }
+    return _canonical_json(packet)
+
+
+def _validate_final_review_packet(
+    packet: bytes,
+    bundle: SealedDeltaBundle,
+) -> str:
+    if type(packet) is not bytes or not packet or len(packet) > MAX_BUNDLE_BYTES * 3:
+        raise BundleError("final review packet is invalid or too large")
+    value = _decode_json(packet)
+    expected = {
+        "approval_binding_hash": ApprovalBinding(
+            source_snapshot_hash=bundle.metadata.source_snapshot_hash,
+            worker_delta_hash=bundle.metadata.worker_delta_hash,
+            projected_task_patch_hash=bundle.metadata.projected_task_patch_hash,
+        ).canonical_hash,
+        "authority_mode": bundle.authority_mode,
+        "bundle_sha256": bundle.metadata.bundle_sha256,
+        "invocation_id": bundle.metadata.invocation_id,
+        "projected_task_patch_hash": bundle.metadata.projected_task_patch_hash,
+        "purpose": "final-review",
+        "source_snapshot_hash": bundle.metadata.source_snapshot_hash,
+        "version": 1,
+        "worker_delta_hash": bundle.metadata.worker_delta_hash,
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            raise BundleError(f"final review packet does not match {field_name}")
+    return expected["approval_binding_hash"]  # type: ignore[return-value]
+
+
+def _open_evidence_anchor(anchor: object, resources: InvocationResources) -> int:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | _require_nofollow()
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    descriptor = os.open(
+        resources.evidence_path.name,
+        flags,
+        dir_fd=anchor.root_fd,  # type: ignore[attr-defined]
+    )
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o700
+            or metadata.st_dev != resources.evidence_device
+            or metadata.st_ino != resources.evidence_inode
+            or metadata.st_uid != _current_uid()
+        ):
+            raise BundleError("review evidence directory changed identity")
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _receipt_from_value(value: object) -> FinalReviewReceipt:
+    receipt = _expect_keys(value, _FINAL_RECEIPT_KEYS, "final review receipt")
+    changes = _expect_list(receipt["requested_changes"], "requested_changes")
+    if not all(type(change) is str for change in changes):
+        raise BundleError("requested_changes must contain only strings")
+    try:
+        return FinalReviewReceipt(
+            schema_version=_expect_integer(receipt["schema_version"], "schema_version"),
+            authority_mode=_expect_string(
+                receipt["authority_mode"], "authority_mode"
+            ),
+            invocation_id=_expect_string(receipt["invocation_id"], "invocation_id"),
+            bundle_sha256=_expect_sha256(receipt["bundle_sha256"], "bundle_sha256"),
+            review_packet_sha256=_expect_sha256(
+                receipt["review_packet_sha256"], "review_packet_sha256"
+            ),
+            source_snapshot_hash=_expect_sha256(
+                receipt["source_snapshot_hash"], "source_snapshot_hash"
+            ),
+            worker_delta_hash=_expect_sha256(
+                receipt["worker_delta_hash"], "worker_delta_hash"
+            ),
+            projected_task_patch_hash=_expect_sha256(
+                receipt["projected_task_patch_hash"],
+                "projected_task_patch_hash",
+            ),
+            approval_binding_hash=_expect_sha256(
+                receipt["approval_binding_hash"], "approval_binding_hash"
+            ),
+            decision=_expect_string(receipt["decision"], "decision"),
+            reviewer_route_id=_expect_string(
+                receipt["reviewer_route_id"], "reviewer_route_id"
+            ),
+            reviewer_fingerprint=_expect_string(
+                receipt["reviewer_fingerprint"], "reviewer_fingerprint"
+            ),
+            fingerprint_evidence_source=_expect_string(
+                receipt["fingerprint_evidence_source"],
+                "fingerprint_evidence_source",
+            ),
+            reviewer_read_only_enforced=receipt["reviewer_read_only_enforced"],
+            main_fingerprint=_expect_string(
+                receipt["main_fingerprint"], "main_fingerprint"
+            ),
+            message=_expect_string(receipt["message"], "message"),
+            requested_changes=tuple(changes),  # type: ignore[arg-type]
+        )
+    except ValueError as exc:
+        raise BundleError(f"final review receipt is invalid: {exc}") from exc
+
+
+def _review_receipt_payload(receipt: FinalReviewReceipt) -> dict[str, object]:
+    return {
+        "approval_binding_hash": receipt.approval_binding_hash,
+        "authority_mode": receipt.authority_mode,
+        "bundle_sha256": receipt.bundle_sha256,
+        "decision": receipt.decision,
+        "fingerprint_evidence_source": receipt.fingerprint_evidence_source,
+        "invocation_id": receipt.invocation_id,
+        "main_fingerprint": receipt.main_fingerprint,
+        "message": receipt.message,
+        "projected_task_patch_hash": receipt.projected_task_patch_hash,
+        "requested_changes": list(receipt.requested_changes),
+        "review_packet_sha256": receipt.review_packet_sha256,
+        "reviewer_fingerprint": receipt.reviewer_fingerprint,
+        "reviewer_read_only_enforced": receipt.reviewer_read_only_enforced,
+        "reviewer_route_id": receipt.reviewer_route_id,
+        "schema_version": receipt.schema_version,
+        "source_snapshot_hash": receipt.source_snapshot_hash,
+        "worker_delta_hash": receipt.worker_delta_hash,
+    }
+
+
+def seal_final_review_receipt(
+    resources: InvocationResources,
+    *,
+    packet: bytes,
+    decision: str,
+    approval_binding_hash: str,
+    reviewer_route_id: str,
+    reviewer_fingerprint: str,
+    fingerprint_evidence_source: str,
+    reviewer_read_only_enforced: bool,
+    main_fingerprint: str,
+    message: str,
+    requested_changes: tuple[str, ...] | list[str],
+) -> FinalReviewReceipt:
+    """Persist the only public-CLI integration authority for one invocation."""
+
+    bundle = read_sealed_delta_bundle(resources)
+    expected_binding = _validate_final_review_packet(packet, bundle)
+    if approval_binding_hash != expected_binding:
+        raise BundleError("review verdict does not bind the exact final packet")
+    try:
+        receipt = FinalReviewReceipt(
+            schema_version=1,
+            authority_mode=bundle.authority_mode,
+            invocation_id=resources.invocation_id,
+            bundle_sha256=bundle.metadata.bundle_sha256,
+            review_packet_sha256=hashlib.sha256(packet).hexdigest(),
+            source_snapshot_hash=bundle.metadata.source_snapshot_hash,
+            worker_delta_hash=bundle.metadata.worker_delta_hash,
+            projected_task_patch_hash=bundle.metadata.projected_task_patch_hash,
+            approval_binding_hash=approval_binding_hash,
+            decision=decision,
+            reviewer_route_id=reviewer_route_id,
+            reviewer_fingerprint=reviewer_fingerprint,
+            fingerprint_evidence_source=fingerprint_evidence_source,
+            reviewer_read_only_enforced=reviewer_read_only_enforced,
+            main_fingerprint=main_fingerprint,
+            message=message,
+            requested_changes=tuple(requested_changes),
+        )
+    except (TypeError, ValueError) as exc:
+        raise BundleError(f"final review approval cannot be sealed: {exc}") from exc
+    raw = _canonical_json(_review_receipt_payload(receipt))
+    descriptor: int | None = None
+    created: os.stat_result | None = None
+    evidence_fd: int | None = None
+    with _validated_root(resources) as anchor:
+        try:
+            evidence_fd = _open_evidence_anchor(anchor, resources)
+            descriptor, created = _create_receipt_at(
+                evidence_fd,
+                resources.final_evidence_path.name,
+                raw,
+                final_mode=0o400,
+            )
+            os.close(descriptor)
+            descriptor = None
+            os.fsync(evidence_fd)
+            _validate_exact_layout(resources, anchor)
+        except FileExistsError as exc:
+            raise BundleAlreadySealedError(
+                "final review receipt already exists; refusing to overwrite it"
+            ) from exc
+        except BundleError:
+            if evidence_fd is not None:
+                _unlink_created_file(
+                    evidence_fd,
+                    resources.final_evidence_path.name,
+                    created,
+                )
+            raise
+        except OSError as exc:
+            if evidence_fd is not None:
+                _unlink_created_file(
+                    evidence_fd,
+                    resources.final_evidence_path.name,
+                    created,
+                )
+            raise BundleError(f"final review receipt could not be sealed: {exc}") from exc
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+            if evidence_fd is not None:
+                os.close(evidence_fd)
+    return receipt
+
+
+def read_final_review_receipt(resources: InvocationResources) -> FinalReviewReceipt:
+    """Read and re-bind the exact final approval used by public integration."""
+
+    bundle = read_sealed_delta_bundle(resources)
+    evidence_fd: int | None = None
+    descriptor: int | None = None
+    with _validated_root(resources) as anchor:
+        try:
+            evidence_fd = _open_evidence_anchor(anchor, resources)
+            descriptor, value, _ = _open_receipt_at(
+                evidence_fd,
+                resources.final_evidence_path.name,
+                allowed_modes=frozenset({0o400}),
+            )
+            receipt = _receipt_from_value(value)
+            if (
+                receipt.authority_mode != bundle.authority_mode
+                or receipt.invocation_id != resources.invocation_id
+                or receipt.bundle_sha256 != bundle.metadata.bundle_sha256
+                or receipt.source_snapshot_hash
+                != bundle.metadata.source_snapshot_hash
+                or receipt.worker_delta_hash != bundle.metadata.worker_delta_hash
+                or receipt.projected_task_patch_hash
+                != bundle.metadata.projected_task_patch_hash
+            ):
+                raise BundleError("final review receipt does not bind this sealed bundle")
+            _validate_exact_layout(resources, anchor)
+            return receipt
+        except FileNotFoundError as exc:
+            raise BundleError("sealed bundle has no final review receipt") from exc
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+            if evidence_fd is not None:
+                os.close(evidence_fd)
 
 
 __all__ = (
@@ -1330,10 +1977,15 @@ __all__ = (
     "BundleTooLargeError",
     "BundleUnsupportedPlatformError",
     "DeltaBundleMetadata",
+    "FinalReviewReceipt",
     "MAX_BUNDLE_BYTES",
     "SCHEMA_VERSION",
     "SealedDeltaBundle",
+    "SealedGateEvidence",
+    "build_final_review_packet",
     "probe_bundle_capability",
+    "read_final_review_receipt",
     "read_sealed_delta_bundle",
     "seal_delta_bundle",
+    "seal_final_review_receipt",
 )

@@ -16,6 +16,7 @@ import runtime.token_saver.resources as resources_module
 from runtime.token_saver.resources import (
     cleanup_invocation,
     create_invocation_resources,
+    load_invocation_resources,
 )
 
 
@@ -312,6 +313,79 @@ class InvocationResourceCreationTests(unittest.TestCase):
                     0o600,
                 )
 
+
+class InvocationResourceLoadingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory(
+            prefix="token-saver-resource-load-test-"
+        )
+        self.base = Path(self.temporary.name)
+        self.repository = self.base / "repository"
+        self.repository.mkdir()
+        self.temp_parent = self.base / "temporary"
+        self.temp_parent.mkdir()
+        self.resources = create_invocation_resources(
+            self.repository,
+            self.temp_parent,
+        )
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def test_load_reconstructs_and_revalidates_the_exact_active_manifest(self) -> None:
+        loaded = load_invocation_resources(self.resources.manifest_path)
+
+        self.assertEqual(loaded, self.resources)
+
+    def test_load_rejects_tampered_manifest_content(self) -> None:
+        manifest = json.loads(
+            self.resources.manifest_path.read_text(encoding="utf-8")
+        )
+        manifest["state"] = "consumed"
+        self.resources.manifest_path.write_text(
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+        self.resources.manifest_path.chmod(0o600)
+
+        with self.assertRaises(ValueError):
+            load_invocation_resources(self.resources.manifest_path)
+
+    def test_load_rejects_a_manifest_symlink_or_external_copy(self) -> None:
+        external = self.base / "manifest-copy.json"
+        external.write_bytes(self.resources.manifest_path.read_bytes())
+        external.chmod(0o600)
+        alias = self.base / "manifest-link.json"
+        alias.symlink_to(self.resources.manifest_path)
+
+        for candidate in (external, alias):
+            with self.subTest(candidate=candidate):
+                with self.assertRaises((OSError, ValueError)):
+                    load_invocation_resources(candidate)
+
+    def test_load_rejects_a_replaced_invocation_root(self) -> None:
+        original = self.temp_parent / "original-root"
+        self.resources.invocation_root.rename(original)
+        self.resources.invocation_root.mkdir(mode=0o700)
+
+        with self.assertRaises(ValueError):
+            load_invocation_resources(original / "manifest.json")
+
+    def test_load_rejects_a_manifest_path_with_a_symlink_loop(self) -> None:
+        loop = self.base / "loop"
+        loop.symlink_to(loop)
+        manifest = json.loads(
+            self.resources.manifest_path.read_text(encoding="utf-8")
+        )
+        manifest["worktree_path"] = os.fspath(loop / "worktree")
+        self.resources.manifest_path.write_text(
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+        self.resources.manifest_path.chmod(0o600)
+
+        with self.assertRaises(ValueError):
+            load_invocation_resources(self.resources.manifest_path)
 
 class InvocationResourceCleanupTests(unittest.TestCase):
     def _exercise_cleanup(self, lifecycle: str, *, register_worktree: bool) -> None:

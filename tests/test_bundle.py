@@ -18,11 +18,16 @@ from runtime.token_saver.bundle import (
     BundleError,
     BundleTooLargeError,
     BundleUnsupportedPlatformError,
+    SealedGateEvidence,
+    build_final_review_packet,
     probe_bundle_capability,
+    read_final_review_receipt,
     read_sealed_delta_bundle,
     seal_delta_bundle,
+    seal_final_review_receipt,
 )
 from runtime.token_saver.evidence import (
+    ApprovalBinding,
     EvidenceRecord,
     MODE_ABSENT,
     MODE_EXECUTABLE,
@@ -310,6 +315,93 @@ class BundleRoundTripTests(BundleTestCase):
         with mock.patch("subprocess.run", side_effect=AssertionError("must not execute")):
             sealed = read_sealed_delta_bundle(self.resources)
         self.assertEqual(sealed.metadata.invocation_id, self.resources.invocation_id)
+
+    def test_green_gate_evidence_round_trips_inside_the_sealed_bundle(self) -> None:
+        gate = SealedGateEvidence(
+            argv=("python3", "-m", "unittest"),
+            cwd=".",
+            status="ok",
+            exit_code=0,
+            stdout_hash="1" * 64,
+            stderr_hash="2" * 64,
+            duration_milliseconds=17,
+        )
+
+        seal_delta_bundle(
+            self.resources,
+            self.snapshot,
+            self.delta,
+            gates=(gate,),
+            authority_mode="max",
+        )
+
+        sealed = read_sealed_delta_bundle(self.resources)
+        self.assertEqual(sealed.gates, (gate,))
+        self.assertEqual(sealed.authority_mode, "max")
+
+    def test_final_review_receipt_is_bound_to_packet_bundle_and_reviewer(self) -> None:
+        gate = SealedGateEvidence(
+            argv=("true",),
+            cwd=".",
+            status="ok",
+            exit_code=0,
+            stdout_hash="1" * 64,
+            stderr_hash="2" * 64,
+            duration_milliseconds=1,
+        )
+        seal_delta_bundle(
+            self.resources,
+            self.snapshot,
+            self.delta,
+            gates=(gate,),
+            authority_mode="max",
+        )
+        sealed = read_sealed_delta_bundle(self.resources)
+        packet = build_final_review_packet(
+            sealed,
+            {
+                "version": 1,
+                "goal": "implement the bounded change",
+                "approved_plan": "change only the allowed files",
+                "acceptance_criteria": ["the exact gate is green"],
+                "main_loop_verdict": "approve",
+            },
+        )
+
+        created = seal_final_review_receipt(
+            self.resources,
+            packet=packet,
+            decision="approve",
+            approval_binding_hash=(
+                ApprovalBinding(
+                    source_snapshot_hash=sealed.metadata.source_snapshot_hash,
+                    worker_delta_hash=sealed.metadata.worker_delta_hash,
+                    projected_task_patch_hash=(
+                        sealed.metadata.projected_task_patch_hash
+                    ),
+                ).canonical_hash
+            ),
+            reviewer_route_id="authority-reviewer",
+            reviewer_fingerprint="example:authority-v1:default",
+            fingerprint_evidence_source="identity-handshake",
+            reviewer_read_only_enforced=True,
+            main_fingerprint="example:balanced-v1:default",
+            message="approved exact packet",
+            requested_changes=(),
+        )
+
+        self.assertEqual(read_final_review_receipt(self.resources), created)
+        self.assertEqual(created.bundle_sha256, sealed.metadata.bundle_sha256)
+        self.assertEqual(created.authority_mode, "max")
+        self.assertEqual(created.review_packet_sha256, _digest(packet))
+        self.assertEqual(
+            stat.S_IMODE(os.lstat(self.resources.final_evidence_path).st_mode),
+            0o400,
+        )
+
+        self.resources.final_evidence_path.chmod(0o600)
+        with self.assertRaisesRegex(BundleError, "mode"):
+            read_final_review_receipt(self.resources)
 
 
 class BundleSealSafetyTests(BundleTestCase):

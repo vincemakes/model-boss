@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import stat
 import tempfile
 import unittest
@@ -45,6 +46,22 @@ class PackageTests(unittest.TestCase):
                 self.assertTrue(all(".." not in Path(name).parts for name in names))
                 forbidden = ("/.git/", "/tests/", "/evals/", "/benchmarks/", "__pycache__", ".pyc")
                 self.assertFalse(any(part in name for name in names for part in forbidden))
+
+    def test_manifest_wide_legacy_brand_occurrences_match_migration_allowlist(self) -> None:
+        legacy = re.compile(rb"fable[-_ ]token[-_ ]saver", re.IGNORECASE)
+        expected = {
+            "README.md": 1,
+            "README.zh-CN.md": 1,
+            "SKILL.md": 1,
+            "runtime/token_saver/cli.py": 1,
+            "runtime/token_saver/package.py": 2,
+        }
+        actual = {}
+        for relative in PACKAGE_MANIFEST:
+            count = len(legacy.findall((ROOT / relative).read_bytes()))
+            if count:
+                actual[relative] = count
+        self.assertEqual(actual, expected)
 
     def test_source_hash_links_permissions_and_metadata_are_stable(self) -> None:
         with tempfile.TemporaryDirectory(prefix="token-saver-package-test-") as text:

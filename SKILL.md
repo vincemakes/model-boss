@@ -55,6 +55,12 @@ checkpoints in one eligible reviewer with a distinct canonical fingerprint. A ch
 worker is optional: Max may be two levels (main loop + reviewer) or three levels (main
 loop + reviewer + worker).
 
+Require every sealed external-worker invocation to pass `worker --mode lite|max`.
+Seal its `authority_mode` into the bundle; it cannot switch, change, or downgrade for
+the lifetime of that invocation. Accept only `review --inline` for a Lite bundle and
+only an external `--profile` plus `--route` reviewer for a Max bundle. Starting a new
+topology requires a new worker invocation.
+
 ## 3. Eligibility and classification gate
 
 Use Token Saver only when orchestration overhead is justified: a bounded task with
@@ -95,6 +101,10 @@ human request to reuse stale approval.
   returns `reviewer_unavailable`, `timeout`, or `transport_error` and blocks dispatch.
 - **DISPATCH → GATE:** dispatch only the task packet into an eligible route. A launch
   failure returns `provider_unavailable`, `transport_error`, or `timeout`.
+  An external adapter that requires bypass permissions must enter through its sealed
+  one-shot worker path: create the invocation and disposable worktree, rerun the OS
+  sandbox conformance probe, execute declared gates, and seal the resulting evidence.
+  Never invoke a raw or direct bypass command from the source repository.
 - **GATE → PATCH_AUDIT:** require every declared command, exit code, and bounded output
   hash. A red or missing gate returns `gate_failed`; workers get at most three
   self-fix attempts.
@@ -124,6 +134,49 @@ Lite binds AUTHORITY_PLAN_CHECK to the main loop and AUTHORITY_FINAL_CHECK to th
 loop, inline. Max binds both checkpoints to the same eligible reviewer with a distinct
 canonical fingerprint. The main loop still drafts, coordinates, performs its own
 review, and integrates; the reviewer never implements.
+
+## 4. Run the sealed worker, review, and integration
+
+Run an external worker with one immutable authority topology:
+
+```bash
+python3 scripts/token-saver-route.py worker \
+  --repo <absolute-repository> \
+  --temp-parent <existing-absolute-temp-parent> \
+  --route <supported-worker-route> \
+  --task <absolute-task.json> \
+  --mode lite
+```
+
+Use `--mode lite` when the inherited main loop reasons and reviews while the secondary
+worker implements. Use `--mode max` when a possibly lower-tier main loop coordinates,
+a distinct higher-authority external reviewer decides, and an optional still-lower
+worker implements.
+
+After the main loop reviews the sealed evidence and supplies the strict review-context
+JSON, use the review path that matches the sealed mode:
+
+```bash
+# Lite
+python3 scripts/token-saver-route.py review --inline \
+  --main-fingerprint <provider:model:variant> \
+  --manifest <manifest> \
+  --context <absolute-review-context.json>
+
+# Max
+python3 scripts/token-saver-route.py review --profile <profile-or-path> \
+  --route <reviewer-route> \
+  --main-fingerprint <provider:model:variant> \
+  --manifest <manifest> \
+  --context <absolute-review-context.json>
+```
+
+An approving review seals the final-review receipt inside the invocation. Integrate
+only through that manifest; do not accept a caller-authored approval file:
+
+```bash
+python3 scripts/token-saver-route.py integrate <manifest>
+```
 
 ## 5. Task packet
 
@@ -167,6 +220,19 @@ approved source changes plus the worker delta. Immediately before integration, a
 current approval for this three-hash tuple is mandatory. A status code alone cannot
 prove that out-of-scope contents are unchanged.
 
+For an external write route, expose exactly `Read`, `Glob`, `Grep`, `Edit`, and `Write`
+to the model. Keep Bash disabled and make Web and MCP unavailable. Execute declared
+gate argument arrays in the Token Saver host after the model call; never give the
+model a shell merely so it can run a gate.
+
+Exclude credential values from prompts, logs, manifests, and evidence packets, but do
+not claim credential isolation from the provider client: that process still receives
+the route credentials needed to reach its endpoint. Prefer short-lived,
+narrowly-scoped tokens. Treat the provider binary as trusted code. The filesystem
+sandbox and model-tool allowlist cannot prevent a malicious or compromised provider
+binary from sending credentials or readable data over its permitted network
+connection.
+
 ## 7. Lite inline-authority verdict
 
 In Lite, the main loop performs both authority checkpoints inline. It must still
@@ -180,8 +246,10 @@ In Max, the distinct reviewer receives evidence packets only. Plan review covers
 draft plan, acceptance criteria, risks, and scope before dispatch. Final review covers
 the approved plan, main-loop verdict, complete canonical patch, gate evidence, private
 scope manifest, and all three hashes. The reviewer returns structured `approve`,
-`revise`, or `needs_context` and echoes the binding hash; it never sees credentials,
-edits files, or supplies implementation.
+`revise`, or `needs_context` and echoes the binding hash. The review packet never
+contains credentials, and the reviewer never edits files or supplies implementation;
+an external reviewer client may still receive provider credentials at the process
+boundary as described above.
 
 The same canonical reviewer must perform plan and final checkpoints. Identity or
 effective permission changes invalidate preflight and return `reviewer_unavailable`.

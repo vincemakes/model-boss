@@ -203,6 +203,43 @@ class WorkerOrchestrationTests(unittest.TestCase):
         self.assertIsNone(result.worker_delta_hash)
         self.assertFalse((self.repo / "worker-output.txt").exists())
 
+    def test_success_after_red_gate_returns_only_the_final_green_evidence(self) -> None:
+        task = WorkerTask(
+            prompt=b"fix the first trusted gate failure",
+            gates=(
+                GateSpec(
+                    argv=(
+                        sys.executable,
+                        "-c",
+                        (
+                            "import os; from pathlib import Path; "
+                            "marker = Path(os.environ['HOME']) / 'retry.marker'; "
+                            "already_failed = marker.exists(); "
+                            "marker.write_text('seen'); "
+                            "raise SystemExit(0 if already_failed else 9)"
+                        ),
+                    ),
+                    cwd=".",
+                    timeout_seconds=5,
+                ),
+            ),
+        )
+
+        result = orchestrate_worker(
+            self.repo,
+            self.snapshot,
+            self.handle,
+            self.route,
+            self.sandbox,
+            task,
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.attempts, 2)
+        self.assertEqual(len(result.gates), 1)
+        self.assertTrue(all(gate.status == "ok" for gate in result.gates))
+        self.assertTrue(result.projected_task_patch_hash)
+
 
 if __name__ == "__main__":
     unittest.main()

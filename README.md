@@ -59,6 +59,12 @@ RESOLVE -> PREFLIGHT -> CLASSIFY -> RECON -> DRAFT_PLAN -> AUTHORITY_PLAN_CHECK 
 
 Lite binds both authority checkpoints to the main loop inline. Max binds both checkpoints to one distinct eligible reviewer. Max cannot dispatch before plan approval, and neither mode can integrate before gates, a complete patch audit, main-loop review, and final approval.
 
+For a sealed external-worker invocation, the chosen topology is also a runtime
+invariant: the required `worker --mode lite|max` value is recorded as
+`authority_mode` in the sealed bundle. That `authority_mode` cannot be switched,
+downgraded, or reinterpreted during review or integration. A Lite bundle accepts only
+inline main-loop authority; a Max bundle accepts only a distinct external reviewer.
+
 Workers receive a bounded task packet instead of conversation history. They work in a disposable worktree, and their claims are checked against independently captured process and Git evidence. Final approval is bound to exactly:
 
 ```text
@@ -80,6 +86,8 @@ Profiles provide capability-based route defaults:
 Those declarations are candidates, not proof. Preflight must verify live reachability, exact effective identity, permissions, credential names, and—when an external command can write—a sandbox bound to that exact invocation.
 
 Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. See [routing and capability resolution](references/routing.md) for the complete rules.
+
+The runtime CLI requires Python 3.11+ and Git. The POSIX setup examples also use `bash` and `install`. A write-capable external worker additionally requires a verified OS backend: `/usr/bin/sandbox-exec` on macOS or Bubblewrap (`bwrap`) on Linux, including WSL. Native Windows has no external-writer backend and uses host-native Claude Code or Codex agents instead.
 
 ## Claude Code setup
 
@@ -145,7 +153,7 @@ Check the installed CLI first:
 codex --version
 ```
 
-GPT-5.6 Sol requires Codex CLI `0.144.0` or later. Token Saver setup does not run or recommend an automatic upgrade; if the installed version is older, stop before selecting the Sol profile.
+`codex --version` is diagnostic, not a capability proof. Before selecting the bundled profile, Token Saver preflight must confirm that the installed Codex supports custom agents, that the exact Sol/Terra/Luna IDs are available in the current account and model catalog, and that the requested sandbox and reasoning settings are accepted. A failed availability check returns `provider_unavailable` or `reviewer_unavailable`. Setup never upgrades the CLI automatically.
 
 The bundled Sol profile treats Sol as an authority route, Terra as a balanced route, and Luna as a fast route. These are fresh-install commands for the skill and four Codex agent declarations.
 
@@ -203,7 +211,15 @@ foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
 
 ## Kimi and GLM external routes
 
-From the installed checkout, `bash scripts/setup-model-providers.sh` installs the existing compatibility wrappers. Their exact role mapping is:
+From the installed checkout, migrate existing provider data and install the compatibility wrappers into an explicit directory:
+
+```bash
+bash scripts/setup-model-providers.sh --install-path "$HOME/.local/bin"
+```
+
+The setup command never edits shell startup files; add that directory to `PATH` yourself if necessary. Its exact role mapping is:
+
+If neither the legacy file nor the new credentials file exists, an explicit `--install-path` still installs the wrappers only; it does not create a credentials file or invent secret values. Supply the required environment variables at launch or configure credentials separately before using a provider route.
 
 | Route role | Reviewer transport base command | Write command allowed only inside verified OS sandbox |
 |---|---|---|
@@ -213,11 +229,73 @@ From the installed checkout, `bash scripts/setup-model-providers.sh` installs th
 | GLM implementer | — | `claude-glm-bypass -p` |
 | GLM fast scout/mechanic | `claude-glm-turbo` | `claude-glm-turbo-bypass -p` |
 
+When the new credentials file does not yet exist, setup migrates the existing
+`$HOME/.claude/fable-token-saver/providers.env` as data; it never sources that file.
+The main loop can then run an external implementation as one sealed operation:
+
+```bash
+mkdir -p "$PWD/../token-saver-runs"
+python3 scripts/token-saver-route.py worker \
+  --repo "$PWD" \
+  --temp-parent "$PWD/../token-saver-runs" \
+  --route claude-kimi-bypass \
+  --task /absolute/path/to/task.json \
+  --mode lite
+```
+
+The command creates and materializes the disposable worktree, reconstructs the
+manifest, injects bypass permission only after a fresh sandbox probe, runs the worker
+and gates, and seals the delta. It does not integrate. Use `--mode lite` when the
+already-selected main loop owns reasoning and final review and the secondary worker
+implements. Use `--mode max` when that main loop may be a lower tier and a distinct,
+higher-authority external reviewer owns the authority decision; Max may still send
+implementation to an even lower worker. The selected mode is immutable for that
+manifest, so changing topology means starting a new worker invocation.
+
+After the main loop has reviewed the complete evidence and written a strict review
+context JSON, seal the matching review. Lite uses the inherited main loop inline:
+
+```bash
+python3 scripts/token-saver-route.py review --inline \
+  --main-fingerprint <provider:model:variant> \
+  --manifest <manifest> \
+  --context /absolute/path/to/review-context.json
+```
+
+Max uses an external reviewer configured by profile and route; `--inline` is invalid:
+
+```bash
+python3 scripts/token-saver-route.py review --profile /absolute/path/to/profile.json \
+  --route <reviewer-route> \
+  --main-fingerprint <provider:model:variant> \
+  --manifest <manifest> \
+  --context /absolute/path/to/review-context.json
+```
+
+An approving review writes an invocation-bound, three-hash final-review receipt.
+Integration reads that sealed receipt through the manifest; it no longer accepts a
+caller-supplied approval file:
+
+```bash
+python3 scripts/token-saver-route.py integrate <manifest>
+```
+
+See the [external CLI contract](references/adapters/external-cli.md) for the exact task
+and review-context schemas. Do not run a bypass alias directly from an ordinary
+repository; without the one-shot invocation manifest it fails closed. These same
+manifest and command contracts can be driven by either a Claude Code or Codex main
+loop; model/provider names are route data, not branches in the workflow.
+
 Plain wrappers are not inherently read-only. Reviewer transport appends `--safe-mode --no-session-persistence --permission-mode plan --tools "" -p`, runs from an isolated evidence directory, disables repository and tool access, and verifies that directory did not mutate. Even then, a candidate is ineligible for Max until preflight proves its exact model fingerprint and separation from the main loop.
 
 A command name is not proof of model identity and never establishes independence. Codex can invoke an existing `claude-kimi*` command as an external route; this does not make Kimi appear natively in the Codex model picker. Wrapper installation never makes Kimi or GLM a native picker entry.
 
-Write-capable bypass routes launch only inside a verified OS sandbox bound to the command, disposable worktree, route state, and sandbox profile. On any OS without a verified backend, Token Saver returns `sandbox_unavailable` without launching the writer.
+Write-capable bypass routes launch only inside a verified OS sandbox bound to the command, disposable worktree, route state, and sandbox profile. The current verified writer backends are macOS and Linux, including Linux under WSL. Native Windows external writers fail closed with `sandbox_unavailable`; Claude Code and Codex native-agent orchestration remains available there.
+
+The external worker model receives exactly the `Read`, `Glob`, `Grep`, `Edit`, and
+`Write` tools. Bash is disabled; Web and MCP tools are unavailable. Declared gate
+commands are direct argument arrays executed by the Token Saver host after the model
+call, not shell access granted to the model.
 
 ## Safety and failure behavior
 
@@ -225,6 +303,13 @@ Token Saver fails closed:
 
 - An explicit Max request never silently degrades to Lite. An unavailable, colliding, unverified, or effectively write-capable reviewer blocks dispatch.
 - External writers never run in the user's repository. They receive only named credentials in a minimal child environment and can write only inside an invocation-owned disposable worktree.
+- Prompts, logs, manifests, and review packets omit credential values, but the provider
+  client process still receives the credentials needed to call its endpoint. Prefer a
+  short-lived, narrowly scoped token with the least permissions the route supports.
+  The tool allowlist and filesystem sandbox are not a network security boundary: a
+  malicious or compromised provider binary can misuse credentials or readable data,
+  and Token Saver cannot prevent that binary from sending them over its permitted
+  provider connection. Install and run only provider binaries you trust.
 - A worker may self-fix failed gates at most three times. Final authority review allows two revision rounds; a third `revise` returns `review_revise` without integration.
 - Out-of-scope writes return `scope_violation`. Changed evidence returns `approval_stale`. Destination drift returns `destination_changed` and requires a fresh snapshot, audit, main-loop review, and authority approval.
 - Failures report concise non-secret evidence and preserve user changes. Cleanup removes only invocation-owned resources.

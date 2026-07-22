@@ -125,6 +125,25 @@ class SkillContentTests(unittest.TestCase):
             with self.subTest(brand=brand):
                 self.assertNotRegex(transition_contract, rf"(?i)\b{brand}\b")
 
+    def test_external_bypass_requires_sealed_one_shot_entry(self) -> None:
+        normalized = " ".join(self.body.lower().split())
+        self.assertRegex(
+            normalized,
+            r"external adapter.{0,180}bypass.{0,220}sealed one-shot worker",
+        )
+        self.assertRegex(
+            normalized,
+            r"never.{0,100}(raw|direct).{0,100}bypass.{0,180}source repository",
+        )
+
+    def test_authority_mode_is_sealed_and_cannot_change_mid_invocation(self) -> None:
+        normalized = " ".join(self.body.lower().split())
+        self.assertIn("authority_mode", normalized)
+        self.assertRegex(
+            normalized,
+            r"authority_mode.{0,240}(sealed|bundle).{0,240}(cannot|never).{0,120}(switch|change|downgrade)",
+        )
+
     def test_every_relative_markdown_link_resolves(self) -> None:
         for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", self.body):
             if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.IGNORECASE):

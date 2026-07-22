@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -57,6 +58,18 @@ class DocumentationTests(unittest.TestCase):
         cls.devnotes = (ROOT / "docs" / "DEVNOTES.zh-CN.md").read_text(
             encoding="utf-8"
         )
+        cls.plan = (
+            ROOT
+            / "docs"
+            / "superpowers"
+            / "plans"
+            / "2026-07-21-token-saver-cross-platform.md"
+        ).read_text(encoding="utf-8")
+        cls.schema = json.loads(
+            (ROOT / "config" / "token-saver.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
 
     def test_readmes_have_synchronized_information_architecture(self) -> None:
         self.assertEqual(_headings(self.en), EN_HEADINGS)
@@ -75,6 +88,18 @@ class DocumentationTests(unittest.TestCase):
             r"(?i)main loop.{0,160}(already selected|immutable|never replaces)",
         )
         self.assertRegex(self.zh, r"主循环.{0,120}(已经选定|不可变|不会替换)")
+
+    def test_published_schema_uses_the_canonical_repository(self) -> None:
+        self.assertEqual(
+            self.schema["$id"],
+            "https://github.com/vincemakes/token-saver/config/token-saver.schema.json",
+        )
+
+    def test_plan_maps_and_packages_the_sealed_bundle_module(self) -> None:
+        self.assertGreaterEqual(
+            self.plan.count("runtime/token_saver/bundle.py"),
+            2,
+        )
 
     def test_lite_and_max_topologies_include_optional_third_level(self) -> None:
         for language, text in (("en", self.en), ("zh", self.zh)):
@@ -104,12 +129,58 @@ class DocumentationTests(unittest.TestCase):
                     self.assertIn(fragment, text)
                 self.assertGreaterEqual(text.count("git clone https://github.com/vincemakes/token-saver.git"), 8)
 
-    def test_codex_version_warning_does_not_auto_upgrade(self) -> None:
+    def test_codex_capability_preflight_does_not_auto_upgrade(self) -> None:
         for language, text in (("en", self.en), ("zh", self.zh)):
             with self.subTest(language=language):
                 self.assertIn("codex --version", text)
-                self.assertIn("0.144.0", text)
+                self.assertNotIn("0.144.0", text)
+                self.assertRegex(text, r"(?i)(catalog|availability|available|模型目录|可用性|可用)")
+                self.assertRegex(text, r"(?i)(preflight|预检)")
                 self.assertNotRegex(text, r"(?i)(npm|brew|pnpm).{0,40}(upgrade|update|@openai/codex)")
+
+    def test_wrapper_install_examples_require_an_explicit_destination(self) -> None:
+        for language, text in (("en", self.en), ("zh", self.zh)):
+            with self.subTest(language=language):
+                self.assertIn(
+                    'scripts/setup-model-providers.sh --install-path "$HOME/.local/bin"',
+                    text,
+                )
+
+    def test_runtime_and_external_writer_prerequisites_are_explicit(self) -> None:
+        for language, text in (("en", self.en), ("zh", self.zh)):
+            with self.subTest(language=language):
+                self.assertRegex(text, r"Python\s+3\.11\+")
+                self.assertIn("Git", text)
+                self.assertIn("sandbox-exec", text)
+                self.assertIn("bwrap", text)
+
+    def test_external_worker_docs_expose_one_shot_flow_and_os_boundary(self) -> None:
+        for language, text in (("en", self.en), ("zh", self.zh)):
+            with self.subTest(language=language):
+                self.assertIn("token-saver-route.py worker", text)
+                self.assertIn("token-saver-route.py integrate", text)
+                self.assertIn("--mode lite", text)
+                self.assertIn("--mode max", text)
+                self.assertIn("review --inline", text)
+                self.assertNotIn("<approval.json>", text)
+                self.assertIn("claude-kimi-bypass", text)
+                self.assertIn("macOS", text)
+                self.assertIn("Linux", text)
+                self.assertIn("WSL", text)
+                self.assertRegex(text, r"(?i)(native Windows|Windows 原生).{0,120}(fail|sandbox_unavailable|拒绝)")
+
+    def test_authority_mode_and_provider_credential_boundaries_are_explicit(self) -> None:
+        for language, text in (("en", self.en), ("zh", self.zh)):
+            with self.subTest(language=language):
+                self.assertRegex(
+                    text,
+                    r"(?is)(authority_mode|权威模式).{0,240}(sealed|密封).{0,240}(cannot|不可|不能)",
+                )
+                for tool in ("Read", "Glob", "Grep", "Edit", "Write"):
+                    self.assertIn(tool, text)
+                self.assertRegex(text, r"(?i)(Bash|shell).{0,100}(disabled|unavailable|禁用|不可用)")
+                self.assertRegex(text, r"(?i)(short-lived|短期).{0,100}(token|凭据)")
+                self.assertRegex(text, r"(?is)(provider binary|Provider 二进制).{0,180}(cannot|无法|不能)")
 
     def test_external_wrapper_mapping_and_fail_closed_language(self) -> None:
         commands = (
@@ -127,6 +198,22 @@ class DocumentationTests(unittest.TestCase):
                 for command in commands:
                     self.assertIn(command, text)
                 self.assertRegex(text, r"(?i)command name.{0,120}(not|never).{0,80}(identity|身份)")
+
+    def test_active_protocol_docs_do_not_expose_legacy_approval_files(self) -> None:
+        active_paths = (
+            ROOT / "README.md",
+            ROOT / "README.zh-CN.md",
+            ROOT / "SKILL.md",
+            ROOT / "references" / "protocol.md",
+            ROOT / "references" / "adapters" / "claude-code.md",
+            ROOT / "references" / "adapters" / "codex.md",
+            ROOT / "references" / "adapters" / "external-cli.md",
+        )
+        for path in active_paths:
+            with self.subTest(path=path.relative_to(ROOT).as_posix()):
+                text = path.read_text(encoding="utf-8")
+                self.assertNotIn("<approval.json>", text)
+                self.assertNotRegex(text, r"integrate\s+<manifest>\s+\S*approval")
 
     def test_benchmark_claims_are_explicitly_scoped(self) -> None:
         for language, text in (("en", self.bench_en), ("zh", self.bench_zh)):

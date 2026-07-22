@@ -21,6 +21,7 @@
 - `runtime/token_saver/routing.py` — pure candidate selection, injectable preflight reports, and final Lite/Max resolution.
 - `runtime/token_saver/evidence.py` — versioned canonical evidence encoding and approval hashes.
 - `runtime/token_saver/repository.py` — deterministic Git snapshots, disposable worktrees, and delta capture.
+- `runtime/token_saver/bundle.py` — sealed invocation-bound delta persistence and one-shot bundle validation.
 - `runtime/token_saver/integration.py` — conflict-safe application of an exactly approved delta.
 - `runtime/token_saver/resources.py` — invocation-owned resource manifests and exact cleanup.
 - `runtime/token_saver/sandbox.py` — filesystem sandbox backend detection, command construction, and conformance probes.
@@ -589,7 +590,7 @@ Expected: all tests pass with fake executables; no model provider is contacted.
 
 - [ ] **Step 7: Produce real route preflight reports through injectable probes**
 
-Add `probe_route(route, role, credentials, sandbox_factory, process_runner) -> RouteProbeResult` in `transport.py` and fake-runner tests. Resolve absolute executables; enforce configured minimum CLI versions; report declared credential names as configured/missing without values; verify native-agent availability from host metadata; for workers, bind the exact `VerifiedSandbox`; and for reviewers, require either host-reported effective read-only permission plus canonical identity or a tool-disabled identity handshake through the hardened reviewer transport. The handshake returns a strict provider family, resolved model ID, and variant that must match a pinned route when one is declared. An unpinned wrapper that cannot reveal identity remains worker-eligible but reviewer-ineligible.
+Add `probe_route(route, role, credentials, sandbox_factory, process_runner) -> RouteProbeResult` in `transport.py` and fake-runner tests. Resolve absolute executables; treat CLI versions as diagnostics and verify required models/capabilities live; report declared credential names as configured/missing without values; verify native-agent availability from host metadata; for workers, bind the exact `VerifiedSandbox`; and for reviewers, require either host-reported effective read-only permission plus canonical identity or a tool-disabled identity handshake through the hardened reviewer transport. The handshake returns a strict provider family, resolved model ID, and variant that must match a pinned route when one is declared. An unpinned wrapper that cannot reveal identity remains worker-eligible but reviewer-ineligible.
 
 The `resolve` CLI in Task 7 must call candidate selection, probe every required route, preflight the candidates with those results, and only then finalize. Tests use fake `--version`, identity, credential, native-host, and sandbox probes to cover unavailable executable, too-old Codex, unreachable reviewer, mismatched identity, absent credentials, and successful Sol/Terra/Kimi worker routes. No test contacts a paid provider.
 
@@ -936,7 +937,7 @@ Do not duplicate provider command syntax in these two files.
 - native `.codex/agents/*.toml`
 - per-agent model and reasoning settings
 - Sol/Terra/Luna example topology
-- Codex CLI 0.144.0 minimum for GPT-5.6 Sol
+- diagnostic `codex --version` plus live model/custom-agent/reasoning/sandbox capability preflight
 - `codex exec --model` fallback
 - why Kimi Chat Completions is not claimed as a native Codex provider
 
@@ -1274,7 +1275,7 @@ foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
 }
 ```
 
-Before the Sol profile, show `codex --version` and state that GPT-5.6 Sol requires Codex CLI `0.144.0` or later. Do not run or recommend an automatic upgrade as part of Token Saver setup. State that write-capable external CLI routes return `sandbox_unavailable` on any OS without a verified backend.
+Before the Sol profile, show `codex --version` as diagnostic information, then require live preflight of the exact model catalog entry, custom-agent support, reasoning setting, and sandbox mode. Do not infer availability from a numeric version or run/recommend an automatic upgrade as part of Token Saver setup. State that write-capable external CLI routes return `sandbox_unavailable` on any OS without a verified backend.
 
 Map the existing commands exactly:
 
@@ -1477,6 +1478,7 @@ runtime/token_saver/config.py
 runtime/token_saver/routing.py
 runtime/token_saver/evidence.py
 runtime/token_saver/repository.py
+runtime/token_saver/bundle.py
 runtime/token_saver/integration.py
 runtime/token_saver/resources.py
 runtime/token_saver/sandbox.py

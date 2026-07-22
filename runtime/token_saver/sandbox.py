@@ -109,15 +109,32 @@ class _PathIdentity:
     device: int
     inode: int
     file_type: int
+    content_hash: str | None
 
     @classmethod
     def capture(cls, path: Path) -> _PathIdentity:
         metadata = os.stat(path, follow_symlinks=False)
+        content_hash = None
+        if stat.S_ISREG(metadata.st_mode):
+            try:
+                content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+                after = os.stat(path, follow_symlinks=False)
+            except OSError as exc:
+                raise SandboxPolicyError("sandbox file identity could not be captured") from exc
+            if (
+                after.st_dev != metadata.st_dev
+                or after.st_ino != metadata.st_ino
+                or after.st_size != metadata.st_size
+                or after.st_mtime_ns != metadata.st_mtime_ns
+                or after.st_ctime_ns != metadata.st_ctime_ns
+            ):
+                raise SandboxPolicyError("sandbox file changed during identity capture")
         return cls(
             path=path,
             device=metadata.st_dev,
             inode=metadata.st_ino,
             file_type=stat.S_IFMT(metadata.st_mode),
+            content_hash=content_hash,
         )
 
     def is_current(self) -> bool:
@@ -125,10 +142,23 @@ class _PathIdentity:
             metadata = os.stat(self.path, follow_symlinks=False)
         except OSError:
             return False
-        return (
+        unchanged = (
             metadata.st_dev == self.device
             and metadata.st_ino == self.inode
             and stat.S_IFMT(metadata.st_mode) == self.file_type
+        )
+        if not unchanged or self.content_hash is None:
+            return unchanged
+        try:
+            digest = hashlib.sha256(self.path.read_bytes()).hexdigest()
+            after = os.stat(self.path, follow_symlinks=False)
+        except OSError:
+            return False
+        return (
+            digest == self.content_hash
+            and after.st_dev == self.device
+            and after.st_ino == self.inode
+            and stat.S_IFMT(after.st_mode) == self.file_type
         )
 
 
@@ -248,7 +278,10 @@ class SandboxPolicy:
         writable_roots = (worktree, route_state)
         for writable_root in writable_roots:
             for readable_root in readable:
-                if _paths_overlap(writable_root, readable_root):
+                if (
+                    writable_root == readable_root
+                    or readable_root in writable_root.parents
+                ):
                     raise SandboxPolicyError("writable and readable roots overlap")
             for protected_root in protected:
                 if _paths_overlap(writable_root, protected_root):
@@ -269,6 +302,17 @@ class SandboxPolicy:
     @property
     def writable_roots(self) -> tuple[Path, Path]:
         return (self.worktree_root, self.route_state_root)
+
+    @property
+    def read_only_nested_roots(self) -> tuple[Path, ...]:
+        return tuple(
+            readable
+            for readable in self.readable_roots
+            if any(
+                readable != writable and readable.is_relative_to(writable)
+                for writable in self.writable_roots
+            )
+        )
 
     @property
     def current(self) -> bool:
@@ -296,6 +340,7 @@ class SandboxPolicy:
                         identity.device.to_bytes(16, "big", signed=False),
                         identity.inode.to_bytes(16, "big", signed=False),
                         identity.file_type.to_bytes(8, "big", signed=False),
+                        (identity.content_hash or "").encode("ascii"),
                     )
                 )
         return _framed_hash(b"TOKEN-SAVER-SANDBOX-POLICY\0", fields)
@@ -411,6 +456,7 @@ def _root_binding_hash(domain: bytes, identity: _PathIdentity) -> str:
             identity.device.to_bytes(16, "big", signed=False),
             identity.inode.to_bytes(16, "big", signed=False),
             identity.file_type.to_bytes(8, "big", signed=False),
+            (identity.content_hash or "").encode("ascii"),
         ),
     )
 
@@ -697,7 +743,10 @@ def _macos_system_roots() -> tuple[Path, ...]:
             "/bin",
             "/sbin",
             "/Library/Apple/System",
+            "/Library/Developer/CommandLineTools",
+            "/opt/homebrew",
             "/private/var/db/dyld",
+            "/private/var/select",
         )
     )
 
@@ -745,7 +794,15 @@ def _validate_effective_reads(
                     "effective readable and protected roots overlap"
                 )
         for writable in policy.writable_roots:
-            if root != policy.worktree_root and _paths_overlap(root, writable):
+            if (
+                root not in policy.writable_roots
+                and _paths_overlap(root, writable)
+                and not (
+                    root != writable
+                    and root.is_relative_to(writable)
+                    and root in policy.read_only_nested_roots
+                )
+            ):
                 raise SandboxPolicyError(
                     "provider executable/runtime overlaps a writable root"
                 )
@@ -787,7 +844,7 @@ def render_macos_profile(
             *_macos_system_roots(),
             *_python_runtime_roots(),
             *policy.readable_roots,
-            policy.worktree_root,
+            *policy.writable_roots,
             resolved_executable,
         )
     )
@@ -810,6 +867,11 @@ def render_macos_profile(
         f"(allow file-read* {read_filters})",
         f"(allow file-write* {write_filters})",
     ]
+    if policy.read_only_nested_roots:
+        read_only_filters = " ".join(
+            _profile_filter(root) for root in policy.read_only_nested_roots
+        )
+        lines.append(f"(deny file-write* {read_only_filters})")
     if policy.network_required:
         lines.append("(allow network*)")
     return "\n".join(lines) + "\n"
@@ -862,12 +924,19 @@ def _bwrap_prefix(
     argv.extend(("--proc", "/proc", "--dev", "/dev"))
     for target, destination in system_aliases:
         argv.extend(("--symlink", target, os.fspath(destination)))
+    nested_read_only = frozenset(policy.read_only_nested_roots)
     for root in sorted(
-        read_roots, key=lambda member: (len(member.parts), os.fspath(member))
+        (root for root in read_roots if root not in nested_read_only),
+        key=lambda member: (len(member.parts), os.fspath(member)),
     ):
         argv.extend(("--ro-bind", os.fspath(root), os.fspath(root)))
     for root in policy.writable_roots:
         argv.extend(("--bind", os.fspath(root), os.fspath(root)))
+    for root in sorted(
+        nested_read_only,
+        key=lambda member: (len(member.parts), os.fspath(member)),
+    ):
+        argv.extend(("--ro-bind", os.fspath(root), os.fspath(root)))
     argv.extend(
         (
             "--remount-ro",
@@ -955,6 +1024,7 @@ def _run_conformance_probe(
     *,
     launcher_prefix: tuple[str, ...],
     policy: SandboxPolicy,
+    probe_parent: Path | None = None,
 ) -> ConformanceProbe:
     nonce = uuid.uuid4().hex
     allowed_path = policy.worktree_root / f".token-saver-probe-{nonce}.read"
@@ -963,7 +1033,28 @@ def _run_conformance_probe(
     inside_payload = b"token-saver-inside-write-v1"
     _write_probe_fixture(allowed_path, allowed_payload)
     try:
-        with tempfile.TemporaryDirectory(prefix="token-saver-outside-probe-") as root:
+        resolved_probe_parent = None
+        if probe_parent is not None:
+            try:
+                resolved_probe_parent = _resolve_directory(
+                    probe_parent,
+                    "probe_parent",
+                )
+            except SandboxPolicyError:
+                return ConformanceProbe(False, False, False, False, False)
+            if any(
+                _paths_overlap(resolved_probe_parent, governed)
+                for governed in (
+                    *policy.writable_roots,
+                    *policy.readable_roots,
+                    *policy.protected_roots,
+                )
+            ):
+                return ConformanceProbe(False, False, False, False, False)
+        with tempfile.TemporaryDirectory(
+            prefix="token-saver-outside-probe-",
+            dir=resolved_probe_parent,
+        ) as root:
             outside_root = Path(root).resolve(strict=True)
             if any(
                 _paths_overlap(outside_root, allowed)
@@ -1073,6 +1164,7 @@ def select_verified_backend(
     route_id: str,
     argv: Sequence[str],
     backend_executable: str | os.PathLike[str] | None = None,
+    probe_parent: str | os.PathLike[str] | None = None,
 ) -> VerifiedSandbox | UnavailableSandbox:
     """Run a real conformance probe and bind its backend to one exact route.
 
@@ -1119,6 +1211,7 @@ def select_verified_backend(
     probe = _run_conformance_probe(
         launcher_prefix=launcher_prefix,
         policy=policy,
+        probe_parent=Path(probe_parent) if probe_parent is not None else None,
     )
     if not probe.passed:
         return UnavailableSandbox(f"{backend} failed its filesystem conformance probe")
