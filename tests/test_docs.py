@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 EN_HEADINGS = (
-    "Token Saver",
+    "Model Boss",
     "Should you use it?",
     "Lite and Max at a glance",
     "The main loop is already selected",
@@ -20,12 +20,13 @@ EN_HEADINGS = (
     "Kimi and GLM external routes",
     "Safety and failure behavior",
     "Reference benchmark snapshot",
-    "When Token Saver steps aside",
+    "When Model Boss steps aside",
+    "Migrating from Token Saver",
     "License",
 )
 
 ZH_HEADINGS = (
-    "Token Saver",
+    "Model Boss",
     "你是否应该使用它？",
     "Lite 与 Max 一览",
     "主循环已经选定",
@@ -36,7 +37,8 @@ ZH_HEADINGS = (
     "Kimi 与 GLM 外部路由",
     "安全与失败行为",
     "参考基准快照",
-    "Token Saver 何时让开",
+    "Model Boss 何时让开",
+    "从 Token Saver 迁移",
     "许可证",
 )
 
@@ -46,6 +48,10 @@ def _headings(text: str) -> tuple[str, ...]:
         match.group(2).strip()
         for match in re.finditer(r"^(#{1,2})\s+(.+?)\s*$", text, re.MULTILINE)
     )
+
+
+def _first_nonblank_lines(text: str, limit: int = 12) -> tuple[str, ...]:
+    return tuple(line.strip() for line in text.splitlines() if line.strip())[:limit]
 
 
 class DocumentationTests(unittest.TestCase):
@@ -63,12 +69,13 @@ class DocumentationTests(unittest.TestCase):
             / "docs"
             / "superpowers"
             / "plans"
-            / "2026-07-21-token-saver-cross-platform.md"
+            / "2026-07-22-model-boss-rename.md"
         ).read_text(encoding="utf-8")
-        cls.schema = json.loads(
-            (ROOT / "config" / "token-saver.schema.json").read_text(
-                encoding="utf-8"
-            )
+        cls.schema_path = ROOT / "config" / "model-boss.schema.json"
+        cls.schema = (
+            json.loads(cls.schema_path.read_text(encoding="utf-8"))
+            if cls.schema_path.is_file()
+            else None
         )
 
     def test_readmes_have_synchronized_information_architecture(self) -> None:
@@ -76,28 +83,62 @@ class DocumentationTests(unittest.TestCase):
         self.assertEqual(_headings(self.zh), ZH_HEADINGS)
         self.assertEqual(len(_headings(self.en)), len(_headings(self.zh)))
 
+    def test_readmes_lead_with_model_boss_positioning(self) -> None:
+        positioning_patterns = {
+            "en": (
+                r"(?is)(inherited main loop|main loop.{0,80}inherited)",
+                r"(?is)(Boss.{0,160}authority holder|authority holder.{0,160}Boss)",
+                r"(?is)(workflow-relative|relative to (?:the )?workflow)",
+                r"(?is)(not|rather than).{0,120}universal.{0,80}(?:model )?ranking",
+            ),
+            "zh": (
+                r"(?s)(继承的?主循环|主循环.{0,80}(继承|沿用))",
+                r"(?s)(Boss.{0,160}(权威持有者|权威负责人|权威主体)|(权威持有者|权威负责人|权威主体).{0,160}Boss)",
+                r"(?s)(相对于.{0,40}工作流|工作流.{0,40}(相对|角色))",
+                r"(?s)(不是|并非|而非).{0,120}(通用|普遍|统一|全局).{0,80}(模型)?排名",
+            ),
+        }
+        for language, text in (("en", self.en), ("zh", self.zh)):
+            with self.subTest(language=language):
+                opening_lines = _first_nonblank_lines(text)
+                opening = "\n".join(opening_lines)
+                self.assertEqual(opening_lines[0], "# Model Boss")
+                self.assertIn("Big models think. Small models ship.", opening)
+                self.assertIn("Cross-model coding orchestration", opening)
+                for pattern in positioning_patterns[language]:
+                    self.assertRegex(opening, pattern)
+
     def test_canonical_identity_and_inherited_main_loop(self) -> None:
-        canonical = "https://github.com/vincemakes/token-saver"
+        canonical = "https://github.com/vincemakes/model-boss"
         for language, text in (("en", self.en), ("zh", self.zh)):
             with self.subTest(language=language):
                 self.assertIn(canonical, text)
-                self.assertNotIn("vincemakes/fable-token-saver", text)
                 self.assertIn("main loop", text.lower())
         self.assertRegex(
             self.en,
-            r"(?i)main loop.{0,160}(already selected|immutable|never replaces)",
+            r"(?is)(inherited main loop|main loop.{0,160}(inherited|already selected|immutable|never replaces))",
         )
-        self.assertRegex(self.zh, r"主循环.{0,120}(已经选定|不可变|不会替换)")
+        self.assertRegex(
+            self.zh,
+            r"(?s)(继承的?主循环|主循环.{0,120}(继承|已经选定|不可变|不会替换))",
+        )
+        self.assertIn("## Migrating from Token Saver", self.en)
+        self.assertIn("## 从 Token Saver 迁移", self.zh)
+        self.assertIn("## 从 Token Saver 迁移", self.devnotes)
 
     def test_published_schema_uses_the_canonical_repository(self) -> None:
+        self.assertIsNotNone(
+            self.schema,
+            f"missing canonical schema: {self.schema_path.relative_to(ROOT)}",
+        )
         self.assertEqual(
             self.schema["$id"],
-            "https://github.com/vincemakes/token-saver/config/token-saver.schema.json",
+            "https://github.com/vincemakes/model-boss/config/model-boss.schema.json",
         )
 
-    def test_plan_maps_and_packages_the_sealed_bundle_module(self) -> None:
+    def test_plan_maps_and_packages_the_canonical_runtime(self) -> None:
         self.assertGreaterEqual(
-            self.plan.count("runtime/token_saver/bundle.py"),
+            self.plan.count("runtime/model_boss/"),
             2,
         )
 
@@ -114,12 +155,12 @@ class DocumentationTests(unittest.TestCase):
 
     def test_exact_install_destinations_cover_both_hosts_and_shells(self) -> None:
         required = (
-            ".claude/skills/token-saver",
+            ".claude/skills/model-boss",
             ".claude/agents",
-            ".agents/skills/token-saver",
+            ".agents/skills/model-boss",
             ".codex/agents",
-            "$HOME/.claude/skills/token-saver",
-            "$HOME/.agents/skills/token-saver",
+            "$HOME/.claude/skills/model-boss",
+            "$HOME/.agents/skills/model-boss",
             "$HOME/.codex/agents",
             "powershell",
         )
@@ -127,7 +168,10 @@ class DocumentationTests(unittest.TestCase):
             with self.subTest(language=language):
                 for fragment in required:
                     self.assertIn(fragment, text)
-                self.assertGreaterEqual(text.count("git clone https://github.com/vincemakes/token-saver.git"), 8)
+                self.assertGreaterEqual(
+                    text.count("git clone https://github.com/vincemakes/model-boss.git"),
+                    8,
+                )
 
     def test_codex_capability_preflight_does_not_auto_upgrade(self) -> None:
         for language, text in (("en", self.en), ("zh", self.zh)):
@@ -157,8 +201,8 @@ class DocumentationTests(unittest.TestCase):
     def test_external_worker_docs_expose_one_shot_flow_and_os_boundary(self) -> None:
         for language, text in (("en", self.en), ("zh", self.zh)):
             with self.subTest(language=language):
-                self.assertIn("token-saver-route.py worker", text)
-                self.assertIn("token-saver-route.py integrate", text)
+                self.assertIn("model-boss.py worker", text)
+                self.assertIn("model-boss.py integrate", text)
                 self.assertIn("--mode lite", text)
                 self.assertIn("--mode max", text)
                 self.assertIn("review --inline", text)
@@ -227,10 +271,9 @@ class DocumentationTests(unittest.TestCase):
                 self.assertRegex(text, r"(?i)(-34%|−34%).{0,120}(-88%|−88%).{0,200}(quota|额度).*(proxy|代理)")
                 self.assertTrue("one observed probe" in text.lower() or "单次观察" in text)
 
-    def test_development_notes_are_a_pre_rename_archive(self) -> None:
-        self.assertRegex(self.devnotes[:600], r"(重命名前|pre-rename).*(存档|archive)")
-        self.assertIn("https://github.com/vincemakes/token-saver", self.devnotes)
-        self.assertIn("fable-token-saver", self.devnotes)
+    def test_development_notes_have_the_canonical_migration_section(self) -> None:
+        self.assertIn("## 从 Token Saver 迁移", self.devnotes)
+        self.assertIn("https://github.com/vincemakes/model-boss", self.devnotes)
 
     def test_all_relative_markdown_links_resolve(self) -> None:
         for filename in (

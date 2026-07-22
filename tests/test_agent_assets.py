@@ -79,11 +79,12 @@ class AgentAssetTests(unittest.TestCase):
         for role in ROLES:
             metadata, body = _claude_file(AGENTS / "claude-code" / f"{role}.md")
             with self.subTest(role=role):
-                self.assertEqual(set(metadata), {"name", "description", "model"})
-                self.assertEqual(metadata["model"], CLAUDE_MODELS[role])
-                self.assertIn("Token Saver default Anthropic profile", metadata["description"])
-                self.assertIn("host main loop remains inherited", body.lower())
                 names.add(str(metadata["name"]))
+                self.assertEqual(set(metadata), {"name", "description", "model"})
+                self.assertEqual(metadata["name"], f"model-boss-{role}")
+                self.assertEqual(metadata["model"], CLAUDE_MODELS[role])
+                self.assertIn("Model Boss default Anthropic profile", metadata["description"])
+                self.assertIn("host main loop remains inherited", body.lower())
         self.assertEqual(len(names), len(ROLES))
 
     def test_codex_assets_have_exact_fields_and_defaults(self) -> None:
@@ -93,12 +94,13 @@ class AgentAssetTests(unittest.TestCase):
             data = tomllib.loads(path.read_text(encoding="utf-8"))
             model, effort, sandbox = CODEX_MODELS[role]
             with self.subTest(role=role):
+                names.add(data["name"])
                 self.assertEqual(set(data), CODEX_KEYS)
+                self.assertEqual(data["name"], f"model_boss_{role}")
                 self.assertEqual(data["model"], model)
                 self.assertEqual(data["model_reasoning_effort"], effort)
                 self.assertEqual(data["sandbox_mode"], sandbox)
                 self.assertIn("host main loop remains inherited", data["developer_instructions"].lower())
-                names.add(data["name"])
         self.assertEqual(len(names), len(ROLES))
 
     def test_codex_assets_match_openai_profile_routes_and_preferences(self) -> None:

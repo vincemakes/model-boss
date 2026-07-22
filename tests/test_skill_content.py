@@ -59,11 +59,18 @@ class SkillContentTests(unittest.TestCase):
 
     def test_frontmatter_is_trigger_only(self) -> None:
         self.assertEqual(set(self.metadata), {"name", "description"})
-        self.assertEqual(self.metadata["name"], "token-saver")
+        self.assertEqual(self.metadata["name"], "model-boss")
         description = self.metadata["description"]
         self.assertIsInstance(description, str)
         self.assertTrue(description.startswith("Use when"))
+        self.assertIn("migrate from Token Saver or fable-token-saver", description)
         self.assertLessEqual(len(description), 1024)
+
+    def test_title_and_commands_use_model_boss_identity(self) -> None:
+        self.assertRegex(self.body, r"(?m)^# Model Boss$")
+        commands = set(re.findall(r"scripts/[a-z0-9-]+\.py", self.body))
+        self.assertTrue(commands, "SKILL.md must name its command entry point")
+        self.assertEqual(commands, {"scripts/model-boss.py"})
 
     def test_state_machine_has_exact_order(self) -> None:
         state_line = re.search(
@@ -163,8 +170,8 @@ class SkillContentTests(unittest.TestCase):
         self.assertEqual(
             set(interface), {"display_name", "short_description", "default_prompt"}
         )
-        self.assertEqual(interface["display_name"], "Token Saver")
-        self.assertIn("$token-saver", interface["default_prompt"])
+        self.assertEqual(interface["display_name"], "Model Boss")
+        self.assertIn("$model-boss", interface["default_prompt"])
 
 
 if __name__ == "__main__":
