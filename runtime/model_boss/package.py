@@ -65,7 +65,6 @@ PACKAGE_MANIFEST = (
     "scripts/setup-model-providers.sh",
     "scripts/package-skill.sh",
     "scripts/validate.sh",
-    "media/og.png",
 )
 EXECUTABLE_PATHS = frozenset(
     {
@@ -79,7 +78,6 @@ _CONTROLLED_PREFIXES = (
     "agents",
     "assets/agents",
     "config",
-    "media",
     "references",
     "runtime/model_boss",
     "scripts",
@@ -169,6 +167,11 @@ def _link_resolves(target: str, manifest: set[str]) -> bool:
     if path.is_absolute() or ".." in path.parts or "\\" in raw:
         return False
     normalized = path.as_posix().rstrip("/")
+    # media/ holds repository documentation material (the social card) that is
+    # rendered from the source tree and deliberately excluded from the packaged
+    # bundle; README references to it resolve against the repo, not the manifest.
+    if normalized == "media" or normalized.startswith("media/"):
+        return True
     return normalized in manifest or any(
         member.startswith(normalized + "/") for member in manifest
     )

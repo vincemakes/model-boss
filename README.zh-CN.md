@@ -4,6 +4,8 @@
 
 [English](README.md) | **简体中文**
 
+[![tests](https://github.com/vincemakes/model-boss/actions/workflows/tests.yml/badge.svg)](https://github.com/vincemakes/model-boss/actions/workflows/tests.yml)
+
 Big models think. Small models ship.
 
 **Cross-model coding orchestration**（跨模型编程编排），适用于 Claude Code 与 Codex。对话的主循环由宿主选定并沿用；Model Boss 永远不会替换它。**Boss** 是工作流的权威持有者：Lite 由继承的主循环 inline 持有权威，Max 由一个独立且已验证的 Reviewer 持有权威。“大/小”是相对于工作流的角色，并非 Provider 或模型的通用排名。

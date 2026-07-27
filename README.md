@@ -4,6 +4,8 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
+[![tests](https://github.com/vincemakes/model-boss/actions/workflows/tests.yml/badge.svg)](https://github.com/vincemakes/model-boss/actions/workflows/tests.yml)
+
 Big models think. Small models ship.
 
 **Cross-model coding orchestration** for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Codex](https://github.com/openai/codex). The conversation's host-selected or inherited main loop is immutable input: Model Boss never replaces it. The **Boss** is the workflow authority holder—Lite keeps that authority inline in the inherited main loop, while Max uses a distinct, verified authority reviewer. "Big" and "small" are workflow-relative roles, not a universal ranking of providers or models.

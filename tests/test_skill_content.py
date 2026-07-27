@@ -57,8 +57,10 @@ class SkillContentTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.metadata, cls.body = _load_skill()
 
-    def test_frontmatter_is_trigger_only(self) -> None:
-        self.assertEqual(set(self.metadata), {"name", "description"})
+    def test_frontmatter_keys_are_exactly_allowlisted(self) -> None:
+        # Frontmatter is limited to the trigger pair plus the compatibility note;
+        # no other keys are permitted.
+        self.assertEqual(set(self.metadata), {"name", "description", "compatibility"})
         self.assertEqual(self.metadata["name"], "model-boss")
         description = self.metadata["description"]
         self.assertIsInstance(description, str)
