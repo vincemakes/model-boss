@@ -12,6 +12,23 @@ Big models think. Small models ship.
 
 Canonical repository: [https://github.com/vincemakes/model-boss](https://github.com/vincemakes/model-boss)
 
+## Usage
+
+After install (see the Claude Code and Codex setup sections below) there is no command to run — you invoke Model Boss conversationally. Phrases like `model boss`, `save model tokens`, or `分层干活` trigger the skill; then describe the topology you want:
+
+```text
+use model boss: let sonnet implement the retry logic in src/http, you review   → Lite
+走 model boss,让 opus 去开发,你来审核                                           → Lite
+model boss max — have fable review the plan and the final diff                → Max
+走 model boss max,让 fable 审计划和最终 diff                                     → Max
+```
+
+In Lite the inherited main loop keeps both authority checkpoints and dispatches an optional worker. In Max a distinct, verified reviewer approves the plan before dispatch and the final evidence before integration — and an explicit Max request stops with `reviewer_unavailable` rather than silently degrading.
+
+Before any work starts, Model Boss prints the resolved topology verdict (`Main loop / Resolved mode / Authority / Worker / Resolution source`). Read it: worker and reviewer names are route aliases, and the verdict shows the canonical model each alias actually resolved to on your host — for example `opus` resolves to the newest Opus your host exposes, which on a not-yet-updated host can lag the newest public release. A route name is never identity proof.
+
+Tiny edits, pure discussion, and unresolved root-cause debugging do not justify orchestration: Model Boss steps aside and the main loop works normally.
+
 ## Should you use it?
 
 Use Model Boss when a task is bounded, constructive, and large enough to repay orchestration overhead: a material multi-file implementation, a migration, repeated mechanical changes, or independent packets with testable acceptance criteria.

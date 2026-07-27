@@ -12,6 +12,23 @@ Big models think. Small models ship.
 
 项目地址：<https://github.com/vincemakes/model-boss>
 
+## 用法
+
+安装完成后（见下方 Claude Code / Codex 安装小节）不需要运行任何命令——直接在对话里说。`model boss`、`省token`、`分层干活` 这类短语会触发 Skill，然后描述你想要的拓扑：
+
+```text
+走 model boss,让 sonnet 实现 src/http 的重试逻辑,你来审核        → Lite
+走 model boss,让 opus 去开发,你来审核                          → Lite
+model boss max — have fable review the plan and the final diff → Max
+走 model boss max,让 fable 审计划和最终 diff                    → Max
+```
+
+Lite 由继承的主循环持有两个权威检查点并派遣可选 Worker；Max 需要一个身份独立且验证过的 Reviewer 在派发前批准计划、在集成前批准最终证据——显式 Max 找不到合格 Reviewer 时以 `reviewer_unavailable` 停止，绝不静默降级。
+
+开始任何工作前，Model Boss 会先打印解析后的拓扑（`Main loop / Resolved mode / Authority / Worker / Resolution source`）。务必看一眼：Worker/Reviewer 名字只是路由别名，verdict 里显示的才是别名在你宿主上实际解析到的模型——例如 `opus` 解析为宿主暴露的最新 Opus，宿主未更新时可能落后于最新公开版本。命令名/别名永远不是模型身份证明。
+
+小改动、纯讨论、未定位根因的调试不会触发编排：Skill 让开，主循环正常工作。
+
 ## 你是否应该使用它？
 
 适合大型、构建型、能提前写清验收标准的任务，例如多文件迁移、重复性改造和新

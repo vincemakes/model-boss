@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 EN_HEADINGS = (
     "Model Boss",
+    "Usage",
     "Should you use it?",
     "Lite and Max at a glance",
     "The main loop is already selected",
@@ -27,6 +28,7 @@ EN_HEADINGS = (
 
 ZH_HEADINGS = (
     "Model Boss",
+    "用法",
     "你是否应该使用它？",
     "Lite 与 Max 一览",
     "主循环已经选定",
