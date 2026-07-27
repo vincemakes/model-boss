@@ -7,15 +7,17 @@ on:
 
 jobs:
   tests:
-    # The suite is currently verified green on macOS; five resource/setup tests
-    # depend on platform behavior (errno values, inode reuse, HOME semantics)
-    # that differs on Linux runners. Linux portability is tracked separately.
+    # The suite is currently verified green on macOS + Python 3.13. Four
+    # resource/setup tests depend on Linux platform behavior (inode reuse,
+    # HOME semantics, preflight fixtures) and one depends on pathlib's
+    # pre-3.13 symlink-loop exception. Broader portability is tracked
+    # separately; this job mirrors the verified environment.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - run: python3 -m pip install pyyaml
       - run: python3 -m unittest discover -s tests
       - run: python3 -m runtime.model_boss.package --repo-root . --validate dist/model-boss.skill
