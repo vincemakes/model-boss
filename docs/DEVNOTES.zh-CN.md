@@ -11,6 +11,16 @@ Model Boss 是 Claude Code 与 Codex 共用的跨模型编程编排工作流。�
 - 打包命令：`bash scripts/package-skill.sh`；标准产物：`dist/model-boss.skill`。
 - 验证命令：`bash scripts/validate.sh` 与 `python3 -m unittest discover -s tests -v`。
 
+## 2026-09 路由升级：精确版本、effort、算账
+
+- 路由字段新增 `effort`（low/medium/high/xhigh/max）、`quota_weight`（默认 1.0）、`aliases`。`effort` 不进身份指纹：同一模型不同 effort 在权威分离上仍是同一个模型，`runtime/model_boss/catalog.py` 按模型目录校验档位（Opus 4.6 / Sonnet 4.6 没有 xhigh，Haiku 4.5 不接受 effort）。
+- 默认 Anthropic Profile 覆盖 Claude Code 选择器 2026-09-02 暴露的 9 个模型，每个高级模型拆成只读 Reviewer 路由和可写 Worker 路由（旧 Profile 里 `opus` 只有 reviewer 角色，README 示例「让 opus 去开发」实际解析不到 Worker）。默认 Worker 偏好是 `opus-5-worker` 再 `sonnet-5`；路由选择优先与主循环模型不同的 Worker。
+- 新命令 `match-models` 把用户口述的模型名按最长匹配映射到路由，目录外版本返回 `needs_context`；`estimate` 按任务形状给 inline / Lite / Max 算账（`runtime/model_boss/dispatch.py`），系数锚定 BENCHMARKS 那一次 1,100 行的记录，只是代理值。
+- 已核实的缓存事实（Claude Code 与 API 文档）：缓存按模型、按 effort 隔离，切换即整段重算；子代理不读父会话缓存，订阅下主会话 1 小时 TTL、子代理 5 分钟（`subagentPromptCacheTtl`）；Fable 5.1 缓存读价 $0.25/MTok（其他模型 0.1 倍基价）；跨模型带得走的是思考块（只在切到 Fable 5.1 的方向），不是缓存。
+- 未核实：按模型的订阅额度倍率没有公开文档，所以做成 `quota_weight` 可配置，默认 1.0。
+- 真实 benchmark 复跑已完成，结果在 [`benchmarks/fable-effort-dispatch-rerun.md`](../benchmarks/fable-effort-dispatch-rerun.md)（原始数据 `.json` 同名）。harness 在 `benchmarks/harness/`（`run_cells.py`，6 个格子，Fable 只跑 low/medium），以独立 `claude -p` 子进程运行，要求终端里 `claude auth login` 过；从桌面 App 宿主会话派生的子进程借不到宿主鉴权。Fable 5.1 要求 CLI 2.1.251+，harness 有版本预检；2026-09-02 为此把 nvm 里的 CLI 从 2.1.246 升到 2.1.258。
+- 复跑结论：Fable 5.1 low 单干最便宜最快（$1.31，比 Fable 5 high 基线省 57%）；Opus 5 worker 几乎不省 Fable 且总额翻倍；Sonnet 5 worker 省约三分之一 Fable 但总额更高；Lite 里 Fable 主循环六到七成花费是读 worker 报告和 diff 的缓存写入。`dispatch.py` 据此重校准，并加了 worker 产出体积因子和子代理 5 分钟 TTL 计价。
+
 ## 评测与安全维护
 
 历史数字仅是 2026 年 Claude/Fable/Opus 参考栈的单次观察，不能推导 Sol、Kimi 或未来 Profile。完整方法、原始数字、负面结果与限制见 [`BENCHMARKS.zh-CN.md`](../BENCHMARKS.zh-CN.md)。复现时每组条件应使用独立进程和全新 fixture，保留 CLI JSON 中的 `modelUsage`，并将盲测集隔离到运行结束后再注入。

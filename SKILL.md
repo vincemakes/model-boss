@@ -22,8 +22,13 @@ route name, endpoint, account, or model-family prose. A canonical fingerprint is
 `provider_family:resolved_model_id:variant`.
 
 Load routes in profile → user → project → per-run order. Configuration may select a
-mode or spawned roles, but it must never select or replace the main loop. Run preflight
-before promising a topology:
+mode or spawned roles, but it must never select or replace the main loop. A route pins
+an exact model ID plus an optional `effort` (`low` to `max`) and `quota_weight`;
+`effort` is a spend control, never identity, so one model at two efforts still
+collides. When the user names a model ("让 opus 4.6 去开发", "have Fable 5.1 review the
+plan"), run `match-models` and pass the matched route as `--worker` or `--reviewer`. A
+version the catalog does not list returns `needs_context`; never substitute a nearby
+version. Run preflight before promising a topology:
 
 - A reviewer needs an authority-capable, reachable fingerprint distinct from the main
   loop and effective read-only enforcement.
@@ -43,12 +48,15 @@ auto-resolution matrix.
 Before reconnaissance or implementation, print this non-secret verdict:
 
 ```text
-Main loop: <route/model>
+Main loop: <route/model[@effort]>
 Resolved mode: <Lite|Max>
-Authority: <inline main loop|reviewer route>
-Worker: <route|main loop|none>
+Authority: <inline main loop|route/model[@effort]>
+Worker: <route/model[@effort]|main loop|none>
 Resolution source: <explicit|project|user|profile>
 ```
+
+Route names are aliases; the verdict shows the exact model each alias resolved to and
+the effort it will run at. Print the `estimate` table (section 3) under the verdict.
 
 In Lite, the inherited main loop is the Boss and owns both AUTHORITY_PLAN_CHECK and
 AUTHORITY_FINAL_CHECK inline while continuing to coordinate and audit the run. A
@@ -76,6 +84,29 @@ work. Step aside for a tiny edit, pure conversation, an unresolved bug whose cau
 still needs diagnosis, or a design/security decision that cannot yet be expressed as
 acceptance criteria. Stepping aside leaves the inherited main loop in charge; it does
 not invent a different route.
+
+Price the hand-off before choosing. Run
+
+```bash
+python3 <model-boss-skill-root>/scripts/model-boss.py estimate \
+  --profile <profile> --main-model <exact-main-model-id> [--main-effort <level>] \
+  --worker <route> [--reviewer <route>] --lines <changed-lines> --files <files> \
+  --judgment low|medium|high --spec clear|partial|unclear [--mechanical] \
+  [--objective weighted|main-model]
+```
+
+It compares inline, Lite, and Max on a quota-weighted price proxy and on the main-loop
+model's own spend, prices the worker's cold start (caches are model-scoped and a
+subagent never reads the main loop's cache) and the expected rework, and applies the
+delegation floor plus a 10% margin. Follow its recommendation unless the user chose a
+topology explicitly; `needs_context` means the acceptance criteria must be clarified
+first. Its coefficients come from two recorded runs and are a tunable proxy, not a bill.
+
+Measured on the recorded large task: a Fable 5.1 main loop at `low` or `medium` effort
+doing the work inline beat every delegated topology on total spend and time; an Opus 5
+worker under a Fable main loop saved almost no Fable spend; a Sonnet 5 worker cut Fable
+spend by about a third at a higher total. In Lite the main loop pays mostly for reading
+the worker's report and diff, so keep worker reports short and diffs tight.
 
 Classify eligible work as implementation, mechanical editing, or read-only
 reconnaissance. Split independent, non-overlapping packets. If the codebase facts are
@@ -231,6 +262,11 @@ DO NOT: <scope and dependency fences>
 Do not pass secrets, shell-expanded command strings, raw conversation history, or
 authority to merge. Preserve the same packet and source snapshot across a worker's
 three gate attempts; a changed task needs a new snapshot and packet.
+
+Everything in the packet is full-price input for the worker: it starts with an empty
+cache, so send conclusions and file references, not transcripts. Keep one model and one
+effort for the whole session; changing either restarts the main loop's cache. A worker
+that will take revision rounds is worth a one-hour subagent cache TTL on the host.
 
 ## 6. Gate and canonical evidence requirements
 

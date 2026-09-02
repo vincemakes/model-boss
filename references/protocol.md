@@ -13,6 +13,14 @@ For tiny edits, pure analysis, unresolved root-cause debugging, or architecture 
 contract cannot yet be specified, step aside and let the inherited main loop work
 normally.
 
+The floor is priced, not guessed. `estimate` compares inline, Lite, and Max for the
+task shape (changed lines, files, judgment density, specification clarity) using the
+catalog's per-token prices and each route's `quota_weight`. It charges the worker's
+cold start, the main loop's packet and review, and the expected rework, then requires
+a 10% saving before recommending a hand-off. Judgment-dense work and unclear
+specifications never dispatch. The estimate is a proxy calibrated on one recorded run
+and is printed with the startup verdict so the trade-off is visible.
+
 ## Authority topologies
 
 The Boss is the workflow authority holder. Lite assigns that authority to the

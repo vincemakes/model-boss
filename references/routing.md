@@ -56,6 +56,42 @@ Accepted evidence sources are structured host metadata, a pinned adapter plus li
 verification, a provider response, or an explicit identity handshake. Evidence must
 describe the actual child invocation, not merely a config default.
 
+`effort` is not part of the tuple. It pins how hard a spawned call thinks
+(`low`, `medium`, `high`, `xhigh`, `max`) and is validated against the model catalog
+(Opus 4.6 and Sonnet 4.6 have no `xhigh`; Haiku 4.5 accepts no effort). One model at
+two efforts is one identity: a Fable 5.1 main loop at `low` cannot use a Fable 5.1
+reviewer at `max` for Max.
+
+## Model catalog and spoken names
+
+`runtime/model_boss/catalog.py` is a dated snapshot of the models the host picker
+exposes, with exact IDs, accepted effort levels, per-token prices, and the minimum
+cacheable prefix. The default Anthropic profile pins one reviewer route and one
+write-capable worker route per authority model (`opus-5` and `opus-5-worker`), plus
+balanced and fast routes. Aliases come from the catalog and from each route's
+`aliases` list; `match-models` finds them in a request with longest-match-wins, so
+"opus 4.6" selects `opus-4.6`/`opus-4.6-worker` while a bare "opus" selects the newest
+Opus. A family name followed by an unknown version ("fable 6") is reported as unmatched
+and resolution returns `needs_context` rather than guessing.
+
+## Worker selection
+
+Among eligible worker routes, the first whose resolved model differs from the main
+loop wins. A same-model worker stays eligible (it isolates context) but is chosen only
+when nothing distinct is available, and the fact is recorded either way. Reviewer
+eligibility is unchanged: the reviewer must be a distinct canonical fingerprint.
+
+## Quota weights and the dispatch estimate
+
+Each route carries `quota_weight` (default `1.0`). `estimate` multiplies each role's
+price-proxy cost by its weight so that a scarcer window counts for more; the default is
+the plain price proxy because per-model subscription metering is not published. The
+`main-model` objective instead minimises the spend billed to the main loop's own model.
+The coefficients are calibrated on the recorded runs in `BENCHMARKS.md` and
+`benchmarks/fable-effort-dispatch-rerun.md`; the latter measured Fable 5.1 at low and
+medium effort inline and with Opus 5 and Sonnet 5 workers, and is why `estimate` charges
+delegated volume and prices subagent cache writes at the five-minute rate.
+
 ## Auto-resolution matrix
 
 | Main-loop facts | Reviewer facts | Result |
@@ -82,10 +118,10 @@ worker only; it never weakens reviewer rules or changes the selected mode.
 Successful resolution prints exactly:
 
 ```text
-Main loop: <route/model>
+Main loop: <route/model[@effort]>
 Resolved mode: <Lite|Max>
-Authority: <inline main loop|reviewer route>
-Worker: <route|main loop|none>
+Authority: <inline main loop|route/model[@effort]>
+Worker: <route/model[@effort]|main loop|none>
 Resolution source: <explicit|project|user|profile>
 ```
 
