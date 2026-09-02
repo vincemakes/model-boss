@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from collections.abc import Mapping
@@ -10,7 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .catalog import supported_effort_levels
 from .models import (
+    EFFORT_LEVELS,
     CapabilityBand,
     CredentialBinding,
     LoadedConfig,
@@ -53,6 +56,9 @@ _SCAN_FIELDS = {
         "model",
         "provider_family",
         "variant",
+        "effort",
+        "quota_weight",
+        "aliases",
         "command",
         "timeout_seconds",
         "retry_policy",
@@ -402,6 +408,9 @@ def _parse_route(route_id: str, value: object) -> Route:
         "model",
         "provider_family",
         "variant",
+        "effort",
+        "quota_weight",
+        "aliases",
         "command",
         "timeout_seconds",
         "retry_policy",
@@ -449,6 +458,42 @@ def _parse_route(route_id: str, value: object) -> Route:
         ):
             raise ConfigError(f"{path}.{field_name}", "must be a non-empty string or null")
         text_fields[field_name] = candidate
+
+    effort = mapping.get("effort")
+    if effort is not None:
+        if not isinstance(effort, str) or effort not in EFFORT_LEVELS:
+            raise ConfigError(
+                f"{path}.effort",
+                "must be one of low, medium, high, xhigh, max, or null",
+            )
+        supported = supported_effort_levels(
+            text_fields["provider_family"],
+            text_fields["model"],
+        )
+        if supported is not None and effort not in supported:
+            raise ConfigError(
+                f"{path}.effort",
+                "is not accepted by the pinned model"
+                if supported
+                else "the pinned model does not accept an effort level",
+            )
+
+    quota_weight = mapping.get("quota_weight", 1.0)
+    if (
+        isinstance(quota_weight, bool)
+        or not isinstance(quota_weight, (int, float))
+        or not math.isfinite(float(quota_weight))
+        or float(quota_weight) <= 0
+    ):
+        raise ConfigError(f"{path}.quota_weight", "must be a positive finite number")
+
+    raw_aliases = mapping.get("aliases", [])
+    if not isinstance(raw_aliases, list) or not all(
+        isinstance(alias, str) and alias.strip() for alias in raw_aliases
+    ):
+        raise ConfigError(f"{path}.aliases", "must be an array of non-empty strings")
+    if len(set(raw_aliases)) != len(raw_aliases):
+        raise ConfigError(f"{path}.aliases", "must not contain duplicates")
 
     command_present = "command" in mapping
     raw_command = mapping.get("command", [])
@@ -499,6 +544,9 @@ def _parse_route(route_id: str, value: object) -> Route:
             timeout_seconds=timeout_seconds,
             retry_policy=retry_policy,
             credential_env=credential_env,
+            effort=effort,
+            quota_weight=float(quota_weight),
+            aliases=tuple(raw_aliases),
         )
     except ValueError:
         raise ConfigError(path, "route contract is invalid") from None

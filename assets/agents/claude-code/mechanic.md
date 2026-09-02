@@ -1,7 +1,7 @@
 ---
 name: model-boss-mechanic
 description: "Mechanical worker for the Model Boss default Anthropic profile; other profiles remain supported."
-model: haiku
+model: claude-haiku-4-5
 ---
 
 The host main loop remains inherited; this file configures only a spawned mechanic.

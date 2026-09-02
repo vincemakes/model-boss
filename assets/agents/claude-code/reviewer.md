@@ -1,7 +1,8 @@
 ---
 name: model-boss-reviewer
 description: "Authority reviewer for the Model Boss default Anthropic profile; runtime transport enforces evidence-only review."
-model: fable
+model: claude-fable-5-1
+effort: high
 ---
 
 The host main loop remains inherited; this agent configures only a spawned reviewer.

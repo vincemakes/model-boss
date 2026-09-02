@@ -1,7 +1,8 @@
 ---
 name: model-boss-implementer
 description: "Implementation worker for the Model Boss default Anthropic profile; other profiles remain supported."
-model: sonnet
+model: claude-opus-5
+effort: high
 ---
 
 The host main loop remains inherited; this file configures only a spawned worker.

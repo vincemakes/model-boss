@@ -50,6 +50,8 @@ PACKAGE_MANIFEST = (
     "runtime/model_boss/models.py",
     "runtime/model_boss/config.py",
     "runtime/model_boss/routing.py",
+    "runtime/model_boss/catalog.py",
+    "runtime/model_boss/dispatch.py",
     "runtime/model_boss/evidence.py",
     "runtime/model_boss/repository.py",
     "runtime/model_boss/bundle.py",

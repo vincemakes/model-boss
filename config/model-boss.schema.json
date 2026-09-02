@@ -193,6 +193,33 @@
           "items": {
             "$ref": "#/$defs/credentialBinding"
           }
+        },
+        "effort": {
+          "description": "Effort level pinned for spawned calls on this route; the model catalog decides which levels a pinned model accepts.",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            null
+          ]
+        },
+        "quota_weight": {
+          "description": "Relative scarcity of this route's quota for dispatch estimates (1.0 = price proxy).",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1.0
+        },
+        "aliases": {
+          "description": "Additional spoken names that match this route in a user request.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": ".*\\S.*"
+          },
+          "uniqueItems": true
         }
       },
       "allOf": [

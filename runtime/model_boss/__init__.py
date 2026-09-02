@@ -1,5 +1,15 @@
 """Model-independent Model Boss runtime contracts and configuration."""
 
+from .catalog import (
+    ANTHROPIC_MODELS,
+    CATALOG_SNAPSHOT_DATE,
+    CatalogModel,
+    MentionReport,
+    ModelMention,
+    find_model,
+    match_model_mentions,
+    supported_effort_levels,
+)
 from .config import (
     SCHEMA_VERSION,
     ConfigError,
@@ -9,7 +19,15 @@ from .config import (
     load_config_layers,
     load_profile_data,
 )
+from .dispatch import (
+    DispatchEstimate,
+    PlanEstimate,
+    RoleSpec,
+    TaskShape,
+    estimate_dispatch,
+)
 from .models import (
+    EFFORT_LEVELS,
     CapabilityBand,
     CredentialBinding,
     LoadedConfig,
@@ -30,8 +48,18 @@ from .models import (
 )
 
 __all__ = [
+    "ANTHROPIC_MODELS",
+    "CATALOG_SNAPSHOT_DATE",
+    "EFFORT_LEVELS",
     "SCHEMA_VERSION",
     "CapabilityBand",
+    "CatalogModel",
+    "DispatchEstimate",
+    "MentionReport",
+    "ModelMention",
+    "PlanEstimate",
+    "RoleSpec",
+    "TaskShape",
     "ConfigError",
     "CredentialBinding",
     "LoadedConfig",
@@ -51,7 +79,11 @@ __all__ = [
     "Transport",
     "discover_project_config_path",
     "discover_user_config_path",
+    "estimate_dispatch",
+    "find_model",
     "load_config",
     "load_config_layers",
     "load_profile_data",
+    "match_model_mentions",
+    "supported_effort_levels",
 ]

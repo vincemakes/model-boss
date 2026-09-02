@@ -246,6 +246,66 @@ def _worker_eligibility(
     return True, None
 
 
+def _worker_shares_main_model(
+    candidate: CandidateTopology,
+    route_id: str,
+    probes: Mapping[str, RouteProbeResult],
+) -> bool:
+    """True when the worker's resolved (or pinned) model equals the main loop's."""
+
+    if candidate.main is None:
+        return False
+    main = candidate.main.fingerprint
+    probe = probes.get(route_id)
+    fingerprint = probe.resolved_fingerprint if probe is not None else None
+    if fingerprint is not None:
+        return fingerprint.canonical == main.canonical
+    route = candidate.routes.get(route_id)
+    if route is None or route.provider_family is None or route.model is None:
+        return False
+    return (
+        route.provider_family.strip().lower() == main.provider_family.strip().lower()
+        and route.model.strip().lower() == main.resolved_model_id.strip().lower()
+    )
+
+
+def _select_worker(
+    candidate: CandidateTopology,
+    eligible_workers: list[str],
+    probes: Mapping[str, RouteProbeResult],
+) -> tuple[str | None, list[str]]:
+    """Pick the first eligible worker, preferring a model distinct from the main loop.
+
+    A same-model worker is still eligible (it isolates context), but it saves no
+    quota, so a later distinct-model preference wins over it.  The choice is
+    recorded as a fact either way.
+    """
+
+    if not eligible_workers:
+        return None, []
+    distinct = [
+        route_id
+        for route_id in eligible_workers
+        if not _worker_shares_main_model(candidate, route_id, probes)
+    ]
+    facts: list[str] = []
+    if distinct:
+        selected = distinct[0]
+        skipped = [route_id for route_id in eligible_workers[: eligible_workers.index(selected)]]
+        for route_id in skipped:
+            facts.append(
+                f"worker route {route_id} resolves to the main-loop model; "
+                f"preferred distinct-model worker {selected}"
+            )
+        return selected, facts
+    selected = eligible_workers[0]
+    facts.append(
+        f"worker route {selected} resolves to the main-loop model; "
+        "it isolates context but saves no quota"
+    )
+    return selected, facts
+
+
 def preflight_candidates(
     candidate: CandidateTopology,
     route_probe_results: Mapping[str, RouteProbeResult],
@@ -281,7 +341,8 @@ def preflight_candidates(
         if fact is not None:
             worker_facts.append(fact)
 
-    selected_worker = eligible_workers[0] if eligible_workers else None
+    selected_worker, selection_facts = _select_worker(candidate, eligible_workers, probes)
+    worker_facts.extend(selection_facts)
     requested_mode = candidate.requested_mode
     main = candidate.main
     if requested_mode is Mode.LITE:

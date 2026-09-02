@@ -41,6 +41,7 @@ from .evidence import (
 )
 from .integration import Approval, integrate_sealed_delta_bundle
 from .models import (
+    EFFORT_LEVELS,
     CapabilityBand,
     MainLoop,
     Mode,
@@ -85,11 +86,24 @@ from .setup import (
     provider_child_environment,
 )
 from .transport import execute_reviewer, probe_route
+from .catalog import CATALOG_SNAPSHOT_DATE, find_model, match_model_mentions
+from .dispatch import (
+    DEFAULT_CACHE_TTL,
+    JUDGMENT_LEVELS,
+    OBJECTIVES,
+    SPEC_LEVELS,
+    SUBAGENT_CACHE_TTL,
+    RoleSpec,
+    TaskShape,
+    estimate_dispatch,
+)
 
 
 CLI_VERSION = 1
 _COMMANDS = (
     "resolve",
+    "match-models",
+    "estimate",
     "plan-review",
     "review",
     "worker",
@@ -102,6 +116,8 @@ _COMMANDS = (
 )
 _COMMAND_HELP = {
     "resolve": "resolve Lite/Max from explicit main-loop facts and live route probes",
+    "match-models": "match spoken model names in a request to configured routes without guessing",
+    "estimate": "price inline versus Lite versus Max for one task shape before dispatch",
     "plan-review": "approve and seal the exact Max plan before worker dispatch",
     "review": "review one sealed bundle and persist an invocation-bound approval receipt",
     "worker": "run an OS-sandboxed external worker and seal its delta",
@@ -855,6 +871,7 @@ def _run_resolve_command(arguments: argparse.Namespace) -> int:
             ),
             band=CapabilityBand(arguments.main_band),
             host=arguments.host,
+            effort=arguments.main_effort,
         )
         candidate = resolve_candidates(main_loop, loaded, overrides)
         credential_document = _optional_credentials_document(arguments.credentials)
@@ -908,6 +925,7 @@ def _run_resolve_command(arguments: argparse.Namespace) -> int:
         _json_output(
             resolution.status,
             main_loop_fingerprint=main_loop.fingerprint.canonical,
+            main_loop_effort=main_loop.effort,
             mode=mode,
             authority=authority,
             worker=resolution.worker,
@@ -925,6 +943,165 @@ def _run_resolve_command(arguments: argparse.Namespace) -> int:
         )
     )
     return _status_exit_code(resolution.status)
+
+
+def _load_layered_config(arguments: argparse.Namespace):
+    profile = _profile_selection(arguments.profile)
+    project_root = (
+        _canonical_directory(arguments.project_root, "project root")
+        if getattr(arguments, "project_root", None)
+        else None
+    )
+    return load_config(
+        profile=profile,
+        project_root=project_root,
+        discover=arguments.discover,
+    )
+
+
+def _run_match_models_command(arguments: argparse.Namespace) -> int:
+    try:
+        loaded = _load_layered_config(arguments)
+        report = match_model_mentions(arguments.text, loaded.routes)
+    except (ConfigError, OSError, TypeError, ValueError):
+        print(_json_output(Status.NEEDS_CONTEXT, message="configuration or request text is invalid"))
+        return 2
+    mentions = [
+        {
+            "alias": mention.alias,
+            "model": mention.model_id,
+            "routes": list(mention.route_ids),
+            "roles": {
+                route_id: sorted(role.value for role in loaded.routes[route_id].roles)
+                for route_id in mention.route_ids
+                if route_id in loaded.routes
+            },
+        }
+        for mention in report.mentions
+    ]
+    status = Status.NEEDS_CONTEXT if report.unmatched else Status.OK
+    print(
+        _json_output(
+            status,
+            catalog_snapshot=CATALOG_SNAPSHOT_DATE,
+            mentions=mentions,
+            unmatched=list(report.unmatched),
+            message=(
+                "a named model version is not configured; ask instead of guessing a version"
+                if report.unmatched
+                else ""
+            ),
+        )
+    )
+    return _status_exit_code(status)
+
+
+def _role_spec_for_route(loaded, route_id: str, label: str, cache_ttl: str) -> RoleSpec:
+    route = loaded.routes.get(route_id)
+    if route is None:
+        raise ConfigError(f"routes.{route_id}", "references an unknown route")
+    if route.provider_family is None or route.model is None:
+        raise ConfigError(f"routes.{route_id}", "is not pinned to a catalog model")
+    return RoleSpec.from_catalog(
+        label,
+        route.provider_family,
+        route.model,
+        effort=route.effort,
+        quota_weight=route.quota_weight,
+        cache_ttl=cache_ttl,
+    )
+
+
+def _run_estimate_command(arguments: argparse.Namespace) -> int:
+    try:
+        loaded = _load_layered_config(arguments)
+        main = RoleSpec.from_catalog(
+            "main loop",
+            arguments.main_provider,
+            arguments.main_model,
+            effort=arguments.main_effort,
+            quota_weight=arguments.main_quota_weight,
+            cache_ttl=arguments.main_ttl,
+        )
+        worker = (
+            _role_spec_for_route(
+                loaded, arguments.worker, f"worker {arguments.worker}", arguments.subagent_ttl
+            )
+            if arguments.worker
+            else None
+        )
+        reviewer = (
+            _role_spec_for_route(
+                loaded, arguments.reviewer, f"reviewer {arguments.reviewer}", arguments.subagent_ttl
+            )
+            if arguments.reviewer
+            else None
+        )
+        task = TaskShape(
+            changed_lines=arguments.lines,
+            files=arguments.files,
+            judgment=arguments.judgment,
+            spec=arguments.spec,
+            mechanical=bool(arguments.mechanical),
+        )
+        estimate = estimate_dispatch(
+            task,
+            main,
+            worker=worker,
+            reviewer=reviewer,
+            objective=arguments.objective,
+        )
+    except LookupError:
+        print(
+            _json_output(
+                Status.NEEDS_CONTEXT,
+                message="a role model has no catalog prices; pin a catalog model or extend the catalog",
+            )
+        )
+        return 2
+    except (ConfigError, OSError, TypeError, ValueError):
+        print(_json_output(Status.NEEDS_CONTEXT, message="estimate inputs are invalid"))
+        return 2
+    plans = [
+        {
+            "plan": plan.plan,
+            "total_usd": plan.total_usd,
+            "weighted_usd": plan.weighted_usd,
+            "main_model_usd": plan.main_model_usd,
+            "notes": list(plan.notes),
+            "roles": [
+                {
+                    "label": cost.role.label,
+                    "model": cost.role.model_id,
+                    "effort": cost.role.effort,
+                    "quota_weight": cost.role.quota_weight,
+                    "input_tokens": cost.usage.input_tokens,
+                    "output_tokens": cost.usage.output_tokens,
+                    "cache_read_tokens": cost.usage.cache_read_tokens,
+                    "cache_write_tokens": cost.usage.cache_write_tokens,
+                    "cost_usd": cost.cost_usd,
+                    "weighted_usd": cost.weighted_usd,
+                }
+                for cost in plan.roles
+            ],
+        }
+        for plan in estimate.plans
+    ]
+    status = (
+        Status.NEEDS_CONTEXT if estimate.recommendation == "needs_context" else Status.OK
+    )
+    print(
+        _json_output(
+            status,
+            catalog_snapshot=CATALOG_SNAPSHOT_DATE,
+            objective=estimate.objective,
+            recommendation=estimate.recommendation,
+            reasons=list(estimate.reasons),
+            plans=plans,
+            table=estimate.table(),
+        )
+    )
+    return _status_exit_code(status)
 
 
 def _run_snapshot_command(arguments: argparse.Namespace) -> int:
@@ -2243,12 +2420,36 @@ def build_parser() -> argparse.ArgumentParser:
                 required=True,
             )
             child.add_argument("--host", required=True)
+            child.add_argument("--main-effort", choices=EFFORT_LEVELS)
             child.add_argument(
                 "--mode",
                 choices=tuple(member.value for member in Mode),
             )
             child.add_argument("--reviewer")
             child.add_argument("--worker")
+        elif name == "match-models":
+            child.add_argument("--profile", required=True)
+            child.add_argument("--project-root")
+            child.add_argument("--discover", action="store_true")
+            child.add_argument("--text", required=True)
+        elif name == "estimate":
+            child.add_argument("--profile", required=True)
+            child.add_argument("--project-root")
+            child.add_argument("--discover", action="store_true")
+            child.add_argument("--main-provider", default="anthropic")
+            child.add_argument("--main-model", required=True)
+            child.add_argument("--main-effort", choices=EFFORT_LEVELS)
+            child.add_argument("--main-quota-weight", type=float, default=1.0)
+            child.add_argument("--worker")
+            child.add_argument("--reviewer")
+            child.add_argument("--lines", type=int, required=True)
+            child.add_argument("--files", type=int, required=True)
+            child.add_argument("--judgment", choices=JUDGMENT_LEVELS, default="medium")
+            child.add_argument("--spec", choices=SPEC_LEVELS, default="clear")
+            child.add_argument("--mechanical", action="store_true")
+            child.add_argument("--objective", choices=OBJECTIVES, default="weighted")
+            child.add_argument("--main-ttl", choices=("5m", "1h"), default=DEFAULT_CACHE_TTL)
+            child.add_argument("--subagent-ttl", choices=("5m", "1h"), default=SUBAGENT_CACHE_TTL)
         elif name == "plan-review":
             child.add_argument("--repo", required=True)
             child.add_argument("--temp-parent", required=True)
@@ -2312,6 +2513,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(exc.code)
     if arguments.command == "resolve":
         return _run_resolve_command(arguments)
+    if arguments.command == "match-models":
+        return _run_match_models_command(arguments)
+    if arguments.command == "estimate":
+        return _run_estimate_command(arguments)
     if arguments.command == "plan-review":
         return _run_plan_review_command(arguments)
     if arguments.command == "review":

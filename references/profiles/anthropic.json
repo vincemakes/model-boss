@@ -2,65 +2,161 @@
   "schema_version": 1,
   "mode": "auto",
   "routes": {
-    "fable": {
+    "fable-5.1": {
       "transport": "host-subagent",
       "band": "authority",
-      "roles": [
-        "reviewer"
-      ],
+      "roles": ["reviewer"],
       "read_only": true,
-      "model": "fable",
+      "model": "claude-fable-5-1",
       "provider_family": "anthropic",
-      "variant": "default"
+      "variant": "default",
+      "effort": "high"
     },
-    "opus": {
+    "fable-5.1-worker": {
       "transport": "host-subagent",
       "band": "authority",
-      "roles": [
-        "reviewer"
-      ],
-      "read_only": true,
-      "model": "opus",
+      "roles": ["worker"],
+      "read_only": false,
+      "model": "claude-fable-5-1",
       "provider_family": "anthropic",
-      "variant": "default"
+      "variant": "default",
+      "effort": "medium"
     },
-    "sonnet": {
+    "fable-5": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["reviewer"],
+      "read_only": true,
+      "model": "claude-fable-5",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "fable-5-worker": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["worker"],
+      "read_only": false,
+      "model": "claude-fable-5",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "medium"
+    },
+    "opus-5": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["reviewer"],
+      "read_only": true,
+      "model": "claude-opus-5",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "opus-5-worker": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["worker"],
+      "read_only": false,
+      "model": "claude-opus-5",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "opus-4.8": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["reviewer"],
+      "read_only": true,
+      "model": "claude-opus-4-8",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "opus-4.8-worker": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["worker"],
+      "read_only": false,
+      "model": "claude-opus-4-8",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "opus-4.7": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["reviewer"],
+      "read_only": true,
+      "model": "claude-opus-4-7",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "opus-4.7-worker": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["worker"],
+      "read_only": false,
+      "model": "claude-opus-4-7",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "opus-4.6": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["reviewer"],
+      "read_only": true,
+      "model": "claude-opus-4-6",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "opus-4.6-worker": {
+      "transport": "host-subagent",
+      "band": "authority",
+      "roles": ["worker"],
+      "read_only": false,
+      "model": "claude-opus-4-6",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "sonnet-5": {
       "transport": "host-subagent",
       "band": "balanced",
-      "roles": [
-        "worker"
-      ],
+      "roles": ["worker", "scout"],
       "read_only": false,
-      "model": "sonnet",
+      "model": "claude-sonnet-5",
       "provider_family": "anthropic",
-      "variant": "default"
+      "variant": "default",
+      "effort": "high"
     },
-    "haiku": {
+    "sonnet-4.6": {
+      "transport": "host-subagent",
+      "band": "balanced",
+      "roles": ["worker", "scout"],
+      "read_only": false,
+      "model": "claude-sonnet-4-6",
+      "provider_family": "anthropic",
+      "variant": "default",
+      "effort": "high"
+    },
+    "haiku-4.5": {
       "transport": "host-subagent",
       "band": "fast",
-      "roles": [
-        "scout",
-        "mechanic"
-      ],
+      "roles": ["scout", "mechanic"],
       "read_only": false,
-      "model": "haiku",
+      "model": "claude-haiku-4-5",
       "provider_family": "anthropic",
-      "variant": "default"
+      "variant": "default",
+      "effort": null
     }
   },
   "preferences": {
-    "reviewers": [
-      "fable",
-      "opus"
-    ],
-    "workers": [
-      "sonnet"
-    ],
-    "scouts": [
-      "haiku"
-    ],
-    "mechanics": [
-      "haiku"
-    ]
+    "reviewers": ["fable-5.1", "opus-5"],
+    "workers": ["opus-5-worker", "sonnet-5"],
+    "scouts": ["haiku-4.5"],
+    "mechanics": ["haiku-4.5"]
   }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import unicodedata
 from dataclasses import InitVar, dataclass, field
@@ -69,6 +70,9 @@ StructuredStatus = Status
 RunStatus = Status
 
 
+EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
+"""Effort levels a route may pin; which ones a given model accepts is catalog data."""
+
 _ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
@@ -89,6 +93,34 @@ def _bounded_retry(value: object, field_name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 10:
         raise ValueError(f"{field_name} must be an integer from 0 to 10")
     return value
+
+
+def _optional_effort(value: object, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in EFFORT_LEVELS:
+        raise ValueError(f"{field_name} must be one of {', '.join(EFFORT_LEVELS)}")
+    return value
+
+
+def _positive_weight(value: object, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be a positive number")
+    weight = float(value)
+    if not math.isfinite(weight) or weight <= 0:
+        raise ValueError(f"{field_name} must be a positive number")
+    return weight
+
+
+def _label(route_id: str, model: str | None, effort: str | None) -> str:
+    """Render `route/model@effort`, omitting the parts that are unknown."""
+
+    text = route_id
+    if model:
+        text = f"{text}/{model}"
+    if effort:
+        text = f"{text}@{effort}"
+    return text
 
 
 @dataclass(frozen=True)
@@ -150,6 +182,9 @@ class Route:
     retry_policy: RetryPolicy = RetryPolicy()
     credential_env: tuple[CredentialBinding, ...] = ()
     variant: str | None = None
+    effort: str | None = None
+    quota_weight: float = 1.0
+    aliases: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_empty_text(self.route_id, "route_id")
@@ -213,11 +248,32 @@ class Route:
         if len(set(child_names)) != len(child_names):
             raise ValueError("credential_env child_name values must be unique")
 
+        effort = _optional_effort(self.effort, "effort")
+        quota_weight = _positive_weight(self.quota_weight, "quota_weight")
+        if not isinstance(self.aliases, (tuple, list)) or not all(
+            isinstance(alias, str) for alias in self.aliases
+        ):
+            raise ValueError("aliases must be a tuple of strings")
+        aliases = tuple(self.aliases)
+        for alias in aliases:
+            _require_non_empty_text(alias, "aliases")
+        if len(set(aliases)) != len(aliases):
+            raise ValueError("aliases must be unique")
+
         object.__setattr__(self, "transport", transport)
         object.__setattr__(self, "band", band)
         object.__setattr__(self, "roles", roles)
         object.__setattr__(self, "command", command)
         object.__setattr__(self, "credential_env", credential_env)
+        object.__setattr__(self, "effort", effort)
+        object.__setattr__(self, "quota_weight", quota_weight)
+        object.__setattr__(self, "aliases", aliases)
+
+    @property
+    def label(self) -> str:
+        """Human-readable `route/model@effort` used in startup verdicts."""
+
+        return _label(self.route_id, self.model, self.effort)
 
 
 def _sandbox_binding_hash(
@@ -405,6 +461,7 @@ class MainLoop:
     fingerprint: ModelFingerprint
     band: CapabilityBand
     host: str
+    effort: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_text(self.route_id, "route_id")
@@ -415,6 +472,11 @@ class MainLoop:
         except (TypeError, ValueError) as exc:
             raise ValueError("band must be a supported capability band") from exc
         _require_non_empty_text(self.host, "host")
+        object.__setattr__(self, "effort", _optional_effort(self.effort, "effort"))
+
+    @property
+    def label(self) -> str:
+        return _label(self.route_id, self.fingerprint.resolved_model_id, self.effort)
 
 
 @dataclass(frozen=True)
@@ -874,17 +936,28 @@ class Resolution:
 
         if self.status is not Status.OK or self.main is None or self.mode is None:
             raise ValueError("blocked resolutions do not have a startup verdict")
-        authority = self.authority_route_id or "inline main loop"
+        if self.authority_route_id is None:
+            authority = "inline main loop"
+        else:
+            authority = self._route_label(self.authority_route_id)
+        worker = (
+            self.worker
+            if self.worker in {"main loop", "none"}
+            else self._route_label(self.worker)
+        )
         return "\n".join(
             (
-                "Main loop: "
-                f"{self.main.route_id}/{self.main.fingerprint.resolved_model_id}",
+                f"Main loop: {self.main.label}",
                 f"Resolved mode: {self.mode.value.title()}",
                 f"Authority: {authority}",
-                f"Worker: {self.worker}",
+                f"Worker: {worker}",
                 f"Resolution source: {self.resolution_source}",
             )
         )
+
+    def _route_label(self, route_id: str) -> str:
+        route = self.candidate.routes.get(route_id)
+        return route_id if route is None else route.label
 
 
 def _normalize_facts(values: object) -> tuple[str, ...]:
