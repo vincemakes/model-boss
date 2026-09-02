@@ -35,6 +35,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "model-boss.py"
 COMMANDS = (
     "resolve",
+    "match-models",
+    "estimate",
     "plan-review",
     "review",
     "worker",
@@ -1340,3 +1342,116 @@ class CliTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RoutingUpgradeCliTests(unittest.TestCase):
+    """match-models and estimate are pure, credential-free helpers for CLASSIFY."""
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            check=False,
+        )
+
+    def test_match_models_maps_spoken_versions_to_configured_routes(self) -> None:
+        result = self._run(
+            "match-models",
+            "--profile",
+            "anthropic",
+            "--text",
+            "走 model boss,让 opus 4.6 去开发,你来审核",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["status"], "ok")
+        self.assertEqual(value["unmatched"], [])
+        self.assertEqual(len(value["mentions"]), 1)
+        mention = value["mentions"][0]
+        self.assertEqual(mention["model"], "claude-opus-4-6")
+        self.assertEqual(mention["routes"], ["opus-4.6", "opus-4.6-worker"])
+        self.assertEqual(mention["roles"]["opus-4.6-worker"], ["worker"])
+
+    def test_match_models_refuses_to_guess_an_unknown_version(self) -> None:
+        result = self._run(
+            "match-models",
+            "--profile",
+            "anthropic",
+            "--text",
+            "let fable 6 handle the review",
+        )
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["status"], "needs_context")
+        self.assertEqual(value["unmatched"], ["fable6"])
+        self.assertEqual(value["mentions"], [])
+
+    def test_estimate_prices_inline_lite_and_max_and_recommends(self) -> None:
+        result = self._run(
+            "estimate",
+            "--profile",
+            "anthropic",
+            "--main-model",
+            "claude-fable-5-1",
+            "--main-effort",
+            "high",
+            "--worker",
+            "sonnet-5",
+            "--reviewer",
+            "opus-5",
+            "--lines",
+            "1100",
+            "--files",
+            "8",
+            "--judgment",
+            "low",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["status"], "ok")
+        self.assertEqual([plan["plan"] for plan in value["plans"]], ["inline", "lite", "max"])
+        self.assertEqual(value["recommendation"], "lite")
+        self.assertIn("Recommendation (weighted): lite", value["table"])
+        lite = value["plans"][1]
+        self.assertEqual([role["model"] for role in lite["roles"]], ["claude-fable-5-1", "claude-sonnet-5"])
+        self.assertLess(lite["main_model_usd"], value["plans"][0]["main_model_usd"])
+
+    def test_estimate_steps_aside_below_the_floor_and_for_judgment_work(self) -> None:
+        small = self._run(
+            "estimate", "--profile", "anthropic", "--main-model", "claude-fable-5-1",
+            "--worker", "opus-5-worker", "--lines", "30", "--files", "1",
+        )
+        self.assertEqual(json.loads(small.stdout)["recommendation"], "inline")
+        debugging = self._run(
+            "estimate", "--profile", "anthropic", "--main-model", "claude-fable-5-1",
+            "--worker", "opus-5-worker", "--lines", "800", "--files", "9", "--judgment", "high",
+        )
+        self.assertEqual(json.loads(debugging.stdout)["recommendation"], "inline")
+        unclear = self._run(
+            "estimate", "--profile", "anthropic", "--main-model", "claude-fable-5-1",
+            "--worker", "opus-5-worker", "--lines", "800", "--files", "9", "--spec", "unclear",
+        )
+        self.assertEqual(unclear.returncode, 2)
+        self.assertEqual(json.loads(unclear.stdout)["recommendation"], "needs_context")
+
+    def test_estimate_requires_catalog_prices(self) -> None:
+        result = self._run(
+            "estimate", "--profile", "anthropic", "--main-model", "claude-unknown-9",
+            "--worker", "opus-5-worker", "--lines", "500", "--files", "5",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stdout)["status"], "needs_context")
+
+    def test_resolve_prints_effort_in_the_startup_verdict(self) -> None:
+        result = self._run(
+            "resolve", "--profile", "anthropic", "--main-route", "conversation",
+            "--main-provider", "anthropic", "--main-model", "claude-fable-5-1",
+            "--main-variant", "default", "--main-band", "authority", "--host", "claude-code",
+            "--main-effort", "medium", "--mode", "lite",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["main_loop_effort"], "medium")
+        self.assertIn("Main loop: conversation/claude-fable-5-1@medium", value["startup_verdict"])

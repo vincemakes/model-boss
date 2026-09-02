@@ -7,6 +7,7 @@ import unittest
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
+from runtime.model_boss.catalog import effort_is_valid_for, find_model
 from runtime.model_boss.config import (
     ConfigError,
     discover_project_config_path,
@@ -935,10 +936,21 @@ class BuiltInProfileTests(unittest.TestCase):
     def test_builtin_profile_aliases_have_the_required_capability_bands(self) -> None:
         expected = {
             "anthropic": {
-                "fable": "authority",
-                "opus": "authority",
-                "sonnet": "balanced",
-                "haiku": "fast",
+                "fable-5.1": "authority",
+                "fable-5.1-worker": "authority",
+                "fable-5": "authority",
+                "fable-5-worker": "authority",
+                "opus-5": "authority",
+                "opus-5-worker": "authority",
+                "opus-4.8": "authority",
+                "opus-4.8-worker": "authority",
+                "opus-4.7": "authority",
+                "opus-4.7-worker": "authority",
+                "opus-4.6": "authority",
+                "opus-4.6-worker": "authority",
+                "sonnet-5": "balanced",
+                "sonnet-4.6": "balanced",
+                "haiku-4.5": "fast",
             },
             "openai": {
                 "gpt-5.6-sol": "authority",
@@ -962,10 +974,10 @@ class BuiltInProfileTests(unittest.TestCase):
     def test_builtin_pinned_routes_declare_canonical_variants(self) -> None:
         expected = {
             "anthropic": {
-                "fable": "default",
-                "opus": "default",
-                "sonnet": "default",
-                "haiku": "default",
+                "fable-5.1": "default",
+                "opus-5": "default",
+                "sonnet-5": "default",
+                "haiku-4.5": "default",
             },
             "openai": {
                 "gpt-5.6-sol": "high",
@@ -984,6 +996,85 @@ class BuiltInProfileTests(unittest.TestCase):
                     },
                     variants,
                 )
+
+    def test_anthropic_profile_pins_exact_catalog_models_with_valid_effort(self) -> None:
+        data = load_profile_data("anthropic")
+        loaded = load_config("anthropic", discover=False)
+        for route_id, raw in data["routes"].items():
+            with self.subTest(route=route_id):
+                self.assertTrue(raw["model"].startswith("claude-"), raw["model"])
+                model = find_model("anthropic", raw["model"])
+                self.assertIsNotNone(model, "every default route must be a catalog model")
+                self.assertTrue(
+                    effort_is_valid_for("anthropic", raw["model"], raw.get("effort"))
+                )
+                if not model.supports_effort:
+                    self.assertIsNone(raw.get("effort"))
+                is_reviewer = "reviewer" in raw["roles"]
+                self.assertEqual(raw["read_only"], is_reviewer)
+        # Every model exposed by the host picker is reachable by a spoken name.
+        for expected_model in (
+            "claude-fable-5-1", "claude-fable-5", "claude-opus-5", "claude-opus-4-8",
+            "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-5", "claude-sonnet-4-6",
+            "claude-haiku-4-5",
+        ):
+            self.assertIn(expected_model, {route.model for route in loaded.routes.values()})
+        # The default worker is a write-capable Opus route distinct from the Fable reviewer.
+        self.assertEqual(data["preferences"]["workers"][0], "opus-5-worker")
+        self.assertIn("worker", data["routes"]["opus-5-worker"]["roles"])
+        self.assertFalse(data["routes"]["opus-5-worker"]["read_only"])
+        self.assertEqual(data["preferences"]["reviewers"][0], "fable-5.1")
+
+    def test_effort_is_validated_against_the_catalog(self) -> None:
+        def route_with(model: str, effort: object) -> dict[str, object]:
+            return {
+                "transport": "host-subagent",
+                "band": "authority",
+                "roles": ["worker"],
+                "read_only": False,
+                "model": model,
+                "provider_family": "anthropic",
+                "variant": "default",
+                "effort": effort,
+            }
+
+        for model, effort, reason in (
+            ("claude-opus-4-6", "xhigh", "not accepted"),
+            ("claude-haiku-4-5", "low", "does not accept"),
+            ("claude-opus-5", "extreme", "must be one of"),
+        ):
+            with self.subTest(model=model, effort=effort):
+                profile = _base_profile()
+                profile["routes"]["worker"] = route_with(model, effort)  # type: ignore[index]
+                with self.assertRaisesRegex(ConfigError, reason):
+                    load_config_layers(profile=profile)
+        # Unknown models cannot be validated and accept any level.
+        profile = _base_profile()
+        profile["routes"]["worker"] = route_with("future-model-x", "xhigh")  # type: ignore[index]
+        loaded = load_config_layers(profile=profile)
+        self.assertEqual(loaded.routes["worker"].effort, "xhigh")
+        self.assertEqual(loaded.routes["worker"].quota_weight, 1.0)
+
+    def test_quota_weight_and_aliases_are_validated(self) -> None:
+        for field_name, value, reason in (
+            ("quota_weight", 0, "positive"),
+            ("quota_weight", -1.5, "positive"),
+            ("quota_weight", True, "positive"),
+            ("aliases", ["opus", "opus"], "duplicates"),
+            ("aliases", [""], "non-empty"),
+            ("aliases", "opus", "array"),
+        ):
+            with self.subTest(field=field_name, value=value):
+                profile = _base_profile()
+                profile["routes"]["worker"][field_name] = value  # type: ignore[index]
+                with self.assertRaisesRegex(ConfigError, reason):
+                    load_config_layers(profile=profile)
+        profile = _base_profile()
+        profile["routes"]["worker"]["quota_weight"] = 2.5  # type: ignore[index]
+        profile["routes"]["worker"]["aliases"] = ["the cheap one"]  # type: ignore[index]
+        loaded = load_config_layers(profile=profile)
+        self.assertEqual(loaded.routes["worker"].quota_weight, 2.5)
+        self.assertEqual(loaded.routes["worker"].aliases, ("the cheap one",))
 
     def test_kimi_authority_is_exact_and_unpinned_cli_is_only_a_custom_worker(self) -> None:
         data = load_profile_data("kimi")

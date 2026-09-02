@@ -12,12 +12,18 @@
             "id": "kimi-worker",
             "fingerprint": "kimi:kimi-k3:default",
             "band": "fast",
-            "roles": ["worker"],
+            "roles": [
+              "worker"
+            ],
             "reachable": true,
             "sandbox": "verified"
           }
         ],
-        "events": ["plan_approve", "gate_pass", "final_approve"]
+        "events": [
+          "plan_approve",
+          "gate_pass",
+          "final_approve"
+        ]
       },
       "expected": {
         "mode": "lite",
@@ -56,12 +62,17 @@
             "id": "sol-reviewer",
             "fingerprint": "openai:gpt-5.6-sol:high",
             "band": "authority",
-            "roles": ["reviewer"],
+            "roles": [
+              "reviewer"
+            ],
             "reachable": true,
             "read_only": true
           }
         ],
-        "events": ["plan_approve", "final_approve"]
+        "events": [
+          "plan_approve",
+          "final_approve"
+        ]
       },
       "expected": {
         "mode": "max",
@@ -100,7 +111,9 @@
             "id": "sol-direct",
             "fingerprint": "openai:gpt-5.6-sol:high",
             "band": "authority",
-            "roles": ["reviewer"],
+            "roles": [
+              "reviewer"
+            ],
             "reachable": true,
             "read_only": true
           },
@@ -108,7 +121,9 @@
             "id": "sol-proxy-alias",
             "fingerprint": "openai:gpt-5.6-sol:high",
             "band": "authority",
-            "roles": ["reviewer"],
+            "roles": [
+              "reviewer"
+            ],
             "reachable": true,
             "read_only": true
           }
@@ -120,7 +135,10 @@
         "status": "reviewer_unavailable",
         "authority": null,
         "worker": null,
-        "states": ["RESOLVE", "PREFLIGHT"],
+        "states": [
+          "RESOLVE",
+          "PREFLIGHT"
+        ],
         "evidence": {
           "failed_invariant": "reviewer_fingerprint_must_differ_from_main_loop",
           "main_loop_fingerprint": "openai:gpt-5.6-sol:high",
@@ -139,7 +157,9 @@
             "id": "sol-reviewer",
             "fingerprint": "openai:gpt-5.6-sol:high",
             "band": "authority",
-            "roles": ["reviewer"],
+            "roles": [
+              "reviewer"
+            ],
             "reachable": false,
             "read_only": true
           }
@@ -151,7 +171,10 @@
         "status": "reviewer_unavailable",
         "authority": null,
         "worker": null,
-        "states": ["RESOLVE", "PREFLIGHT"],
+        "states": [
+          "RESOLVE",
+          "PREFLIGHT"
+        ],
         "evidence": {
           "failed_invariant": "explicit_max_requires_reachable_distinct_reviewer",
           "route_id": "sol-reviewer",
@@ -170,7 +193,9 @@
             "id": "sol-reviewer",
             "fingerprint": "openai:gpt-5.6-sol:high",
             "band": "authority",
-            "roles": ["reviewer"],
+            "roles": [
+              "reviewer"
+            ],
             "reachable": true,
             "read_only": true
           },
@@ -178,12 +203,19 @@
             "id": "kimi-worker",
             "fingerprint": "kimi:kimi-k3:default",
             "band": "fast",
-            "roles": ["worker"],
+            "roles": [
+              "worker"
+            ],
             "reachable": true,
             "sandbox": "verified"
           }
         ],
-        "events": ["plan_approve", "revise", "revise", "approve"]
+        "events": [
+          "plan_approve",
+          "revise",
+          "revise",
+          "approve"
+        ]
       },
       "expected": {
         "mode": "max",
@@ -232,7 +264,9 @@
             "id": "sol-reviewer",
             "fingerprint": "openai:gpt-5.6-sol:high",
             "band": "authority",
-            "roles": ["reviewer"],
+            "roles": [
+              "reviewer"
+            ],
             "reachable": true,
             "read_only": true
           },
@@ -240,12 +274,19 @@
             "id": "kimi-worker",
             "fingerprint": "kimi:kimi-k3:default",
             "band": "fast",
-            "roles": ["worker"],
+            "roles": [
+              "worker"
+            ],
             "reachable": true,
             "sandbox": "verified"
           }
         ],
-        "events": ["plan_approve", "revise", "revise", "revise"]
+        "events": [
+          "plan_approve",
+          "revise",
+          "revise",
+          "revise"
+        ]
       },
       "expected": {
         "mode": "max",
@@ -293,7 +334,9 @@
             "id": "sol-reviewer",
             "fingerprint": "openai:gpt-5.6-sol:high",
             "band": "authority",
-            "roles": ["reviewer"],
+            "roles": [
+              "reviewer"
+            ],
             "reachable": true,
             "read_only": true
           },
@@ -301,12 +344,18 @@
             "id": "kimi-worker",
             "fingerprint": "kimi:kimi-k3:default",
             "band": "fast",
-            "roles": ["worker"],
+            "roles": [
+              "worker"
+            ],
             "reachable": true,
             "sandbox": "verified"
           }
         ],
-        "events": ["plan_approve", "final_approve", "evidence_changed"]
+        "events": [
+          "plan_approve",
+          "final_approve",
+          "evidence_changed"
+        ]
       },
       "expected": {
         "mode": "max",
@@ -343,7 +392,9 @@
             "id": "sol-reviewer",
             "fingerprint": "openai:gpt-5.6-sol:high",
             "band": "authority",
-            "roles": ["reviewer"],
+            "roles": [
+              "reviewer"
+            ],
             "reachable": true,
             "read_only": true
           },
@@ -351,7 +402,9 @@
             "id": "kimi-worker",
             "fingerprint": "kimi:kimi-k3:default",
             "band": "fast",
-            "roles": ["worker"],
+            "roles": [
+              "worker"
+            ],
             "reachable": true,
             "sandbox": "unavailable"
           }
@@ -363,11 +416,164 @@
         "status": "sandbox_unavailable",
         "authority": "sol-reviewer",
         "worker": "kimi-worker",
-        "states": ["RESOLVE", "PREFLIGHT"],
+        "states": [
+          "RESOLVE",
+          "PREFLIGHT"
+        ],
         "evidence": {
           "failed_invariant": "external_worker_requires_verified_os_sandbox",
           "route_id": "kimi-worker",
           "sandbox": "unavailable"
+        }
+      }
+    },
+    {
+      "id": "same-model-worker-deprioritized",
+      "input": {
+        "host": "claude-code",
+        "main_loop": "anthropic:claude-opus-5:default",
+        "explicit_mode": "lite",
+        "routes": [
+          {
+            "id": "opus-5-worker",
+            "fingerprint": "anthropic:claude-opus-5:default",
+            "band": "authority",
+            "roles": [
+              "worker"
+            ],
+            "reachable": true,
+            "sandbox": "host-native"
+          },
+          {
+            "id": "sonnet-5",
+            "fingerprint": "anthropic:claude-sonnet-5:default",
+            "band": "balanced",
+            "roles": [
+              "worker"
+            ],
+            "reachable": true,
+            "sandbox": "host-native"
+          }
+        ],
+        "events": [
+          "plan_approve",
+          "gate_pass",
+          "final_approve"
+        ]
+      },
+      "expected": {
+        "mode": "lite",
+        "status": "ok",
+        "authority": "inline",
+        "worker": "sonnet-5",
+        "states": [
+          "RESOLVE",
+          "PREFLIGHT",
+          "CLASSIFY",
+          "RECON",
+          "DRAFT_PLAN",
+          "AUTHORITY_PLAN_CHECK",
+          "DISPATCH",
+          "GATE",
+          "PATCH_AUDIT",
+          "MAIN_LOOP_REVIEW",
+          "AUTHORITY_FINAL_CHECK",
+          "INTEGRATE"
+        ],
+        "evidence": {
+          "authority_binding": "main_loop",
+          "worker_selection": "first eligible worker whose model differs from the main loop",
+          "skipped_worker": "opus-5-worker",
+          "gate_result": "passed",
+          "approval_binding": "current"
+        }
+      }
+    },
+    {
+      "id": "named-version-worker",
+      "input": {
+        "host": "claude-code",
+        "main_loop": "anthropic:claude-fable-5-1:default",
+        "explicit_mode": "lite",
+        "routes": [
+          {
+            "id": "opus-4.6-worker",
+            "fingerprint": "anthropic:claude-opus-4-6:default",
+            "band": "authority",
+            "roles": [
+              "worker"
+            ],
+            "reachable": true,
+            "sandbox": "host-native",
+            "explicit": true,
+            "spoken_as": "opus 4.6"
+          }
+        ],
+        "events": [
+          "plan_approve",
+          "gate_pass",
+          "final_approve"
+        ]
+      },
+      "expected": {
+        "mode": "lite",
+        "status": "ok",
+        "authority": "inline",
+        "worker": "opus-4.6-worker",
+        "states": [
+          "RESOLVE",
+          "PREFLIGHT",
+          "CLASSIFY",
+          "RECON",
+          "DRAFT_PLAN",
+          "AUTHORITY_PLAN_CHECK",
+          "DISPATCH",
+          "GATE",
+          "PATCH_AUDIT",
+          "MAIN_LOOP_REVIEW",
+          "AUTHORITY_FINAL_CHECK",
+          "INTEGRATE"
+        ],
+        "evidence": {
+          "authority_binding": "main_loop",
+          "worker_selection": "explicit route matched from the spoken model name; a version outside the catalog would return needs_context",
+          "gate_result": "passed",
+          "approval_binding": "current"
+        }
+      }
+    },
+    {
+      "id": "effort-is-not-identity",
+      "input": {
+        "host": "claude-code",
+        "main_loop": "anthropic:claude-fable-5-1:default",
+        "explicit_mode": "max",
+        "routes": [
+          {
+            "id": "fable-5.1",
+            "fingerprint": "anthropic:claude-fable-5-1:default",
+            "band": "authority",
+            "roles": [
+              "reviewer"
+            ],
+            "reachable": true,
+            "sandbox": "read-only",
+            "effort": "max"
+          }
+        ],
+        "events": []
+      },
+      "expected": {
+        "mode": "max",
+        "status": "reviewer_unavailable",
+        "authority": null,
+        "worker": null,
+        "states": [
+          "RESOLVE",
+          "PREFLIGHT"
+        ],
+        "evidence": {
+          "reviewer_collision": "same canonical fingerprint as the main loop; effort is a spend control, not identity"
         }
       }
     }

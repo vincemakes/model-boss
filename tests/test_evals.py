@@ -20,6 +20,9 @@ REQUIRED_OUTCOMES = {
     "revision-limit": ("max", "review_revise"),
     "approval-stale": ("max", "approval_stale"),
     "sandbox-unavailable": ("max", "sandbox_unavailable"),
+    "same-model-worker-deprioritized": ("lite", "ok"),
+    "named-version-worker": ("lite", "ok"),
+    "effort-is-not-identity": ("max", "reviewer_unavailable"),
 }
 
 INPUT_KEYS = {"host", "main_loop", "explicit_mode", "routes", "events"}

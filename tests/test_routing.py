@@ -369,10 +369,114 @@ class ModeResolutionTests(unittest.TestCase):
             resolution.startup_verdict(),
             "Main loop: host-main/gpt-5.6-terra\n"
             "Resolved mode: Max\n"
-            "Authority: sol-reviewer\n"
+            "Authority: sol-reviewer/gpt-5.6-sol\n"
             "Worker: main loop\n"
             "Resolution source: project",
         )
+
+    def test_startup_verdict_shows_resolved_model_and_effort(self) -> None:
+        fable_main = MainLoop(
+            route_id="conversation",
+            fingerprint=ModelFingerprint("anthropic", "claude-fable-5-1", "default"),
+            band=CapabilityBand.AUTHORITY,
+            host="claude-code",
+            effort="medium",
+        )
+        opus_worker = replace(
+            _route(
+                "opus-5-worker",
+                ModelFingerprint("anthropic", "claude-opus-5", "default"),
+                role=Role.WORKER,
+                band=CapabilityBand.AUTHORITY,
+            ),
+            effort="high",
+        )
+        candidate, preflight, resolution = _resolve(
+            fable_main,
+            _config((opus_worker,), workers=(opus_worker.route_id,)),
+            {
+                opus_worker.route_id: _probe(
+                    opus_worker,
+                    ModelFingerprint("anthropic", "claude-opus-5", "default"),
+                )
+            },
+        )
+        self.assertEqual(resolution.status, Status.OK)
+        self.assertEqual(
+            resolution.startup_verdict(),
+            "Main loop: conversation/claude-fable-5-1@medium\n"
+            "Resolved mode: Lite\n"
+            "Authority: inline main loop\n"
+            "Worker: opus-5-worker/claude-opus-5@high\n"
+            "Resolution source: profile",
+        )
+
+    def test_worker_selection_prefers_a_model_distinct_from_the_main_loop(self) -> None:
+        opus = ModelFingerprint("anthropic", "claude-opus-5", "default")
+        sonnet = ModelFingerprint("anthropic", "claude-sonnet-5", "default")
+        opus_worker = _route(
+            "opus-5-worker", opus, role=Role.WORKER, band=CapabilityBand.AUTHORITY
+        )
+        sonnet_worker = _route(
+            "sonnet-5", sonnet, role=Role.WORKER, band=CapabilityBand.BALANCED
+        )
+        config = _config(
+            (opus_worker, sonnet_worker),
+            workers=(opus_worker.route_id, sonnet_worker.route_id),
+        )
+        probes = {
+            opus_worker.route_id: _probe(opus_worker, opus),
+            sonnet_worker.route_id: _probe(sonnet_worker, sonnet),
+        }
+
+        # Opus main loop: the same-model Opus worker is skipped for Sonnet.
+        _, preflight, resolution = _resolve(_main(opus, CapabilityBand.AUTHORITY), config, probes)
+        self.assertEqual(preflight.selected_worker_route_id, "sonnet-5")
+        self.assertEqual(preflight.eligible_worker_route_ids, ("opus-5-worker", "sonnet-5"))
+        self.assertTrue(
+            any("opus-5-worker resolves to the main-loop model" in fact for fact in resolution.facts)
+        )
+
+        # Fable main loop: the first preference, Opus, is distinct and wins.
+        fable = ModelFingerprint("anthropic", "claude-fable-5-1", "default")
+        _, preflight, resolution = _resolve(_main(fable, CapabilityBand.AUTHORITY), config, probes)
+        self.assertEqual(preflight.selected_worker_route_id, "opus-5-worker")
+        self.assertEqual(resolution.facts, ())
+
+        # Only a same-model worker configured: still eligible, but the fact says so.
+        only_opus = _config((opus_worker,), workers=(opus_worker.route_id,))
+        _, preflight, resolution = _resolve(
+            _main(opus, CapabilityBand.AUTHORITY),
+            only_opus,
+            {opus_worker.route_id: probes[opus_worker.route_id]},
+        )
+        self.assertEqual(preflight.selected_worker_route_id, "opus-5-worker")
+        self.assertTrue(any("saves no quota" in fact for fact in resolution.facts))
+
+    def test_effort_never_enters_the_identity_fingerprint(self) -> None:
+        """Same model at a different effort is not an independent reviewer."""
+
+        fable = ModelFingerprint("anthropic", "claude-fable-5-1", "default")
+        reviewer = replace(
+            _route("fable-5.1", fable, role=Role.REVIEWER, band=CapabilityBand.AUTHORITY),
+            effort="max",
+        )
+        low_main = MainLoop(
+            route_id="conversation",
+            fingerprint=fable,
+            band=CapabilityBand.AUTHORITY,
+            host="claude-code",
+            effort="low",
+        )
+        _, preflight, resolution = _resolve(
+            low_main,
+            _config((reviewer,), reviewers=(reviewer.route_id,)),
+            {reviewer.route_id: _probe(reviewer, fable)},
+            RunOverrides(mode=Mode.MAX),
+        )
+        self.assertEqual(preflight.status, Status.REVIEWER_UNAVAILABLE)
+        self.assertEqual(resolution.status, Status.REVIEWER_UNAVAILABLE)
+        self.assertTrue(any("resolves to the main-loop model" in fact for fact in resolution.facts))
 
     def test_explicit_max_allows_opus_main_with_distinct_fable_reviewer(self) -> None:
         fable_route = _route(

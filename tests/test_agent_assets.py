@@ -14,10 +14,24 @@ AGENTS = ROOT / "assets" / "agents"
 ROLES = ("reviewer", "implementer", "mechanic", "scout")
 
 CLAUDE_MODELS = {
-    "reviewer": "fable",
-    "implementer": "sonnet",
-    "mechanic": "haiku",
-    "scout": "haiku",
+    "reviewer": "claude-fable-5-1",
+    "implementer": "claude-opus-5",
+    "mechanic": "claude-haiku-4-5",
+    "scout": "claude-haiku-4-5",
+}
+
+CLAUDE_EFFORTS = {
+    "reviewer": "high",
+    "implementer": "high",
+    "mechanic": None,
+    "scout": None,
+}
+
+CLAUDE_PROFILE_PREFERENCE = {
+    "reviewer": "reviewers",
+    "implementer": "workers",
+    "mechanic": "mechanics",
+    "scout": "scouts",
 }
 
 CODEX_MODELS = {
@@ -80,12 +94,31 @@ class AgentAssetTests(unittest.TestCase):
             metadata, body = _claude_file(AGENTS / "claude-code" / f"{role}.md")
             with self.subTest(role=role):
                 names.add(str(metadata["name"]))
-                self.assertEqual(set(metadata), {"name", "description", "model"})
+                self.assertEqual(set(metadata) - {"effort"}, {"name", "description", "model"})
                 self.assertEqual(metadata["name"], f"model-boss-{role}")
                 self.assertEqual(metadata["model"], CLAUDE_MODELS[role])
+                self.assertEqual(metadata.get("effort"), CLAUDE_EFFORTS[role])
                 self.assertIn("Model Boss default Anthropic profile", metadata["description"])
                 self.assertIn("host main loop remains inherited", body.lower())
         self.assertEqual(len(names), len(ROLES))
+
+    def test_claude_assets_match_anthropic_profile_default_routes(self) -> None:
+        profile = json.loads(
+            (ROOT / "references" / "profiles" / "anthropic.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        for role, preference in CLAUDE_PROFILE_PREFERENCE.items():
+            metadata, _ = _claude_file(AGENTS / "claude-code" / f"{role}.md")
+            route_id = profile["preferences"][preference][0]
+            route = profile["routes"][route_id]
+            with self.subTest(role=role, route=route_id):
+                self.assertEqual(metadata["model"], route["model"])
+                self.assertEqual(metadata.get("effort"), route.get("effort"))
+                self.assertIn(
+                    {"reviewer": "reviewer", "implementer": "worker"}.get(role, role),
+                    route["roles"],
+                )
 
     def test_codex_assets_have_exact_fields_and_defaults(self) -> None:
         names: set[str] = set()
