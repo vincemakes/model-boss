@@ -6,6 +6,8 @@
 
 > 发布来源说明:前身身份已归一化为中性标签,采集到的绝对工作区前缀也已归一化为 `<historical-workspace>`。记录的任务、闸门输出、结果以及 token/费用/时间测量值均未更改;该占位符不表示这些运行发生在 Model Boss 目录下。
 
+后续在下一代 Fable 上以 low 与 medium 两档、并搭配 Opus 与 Sonnet worker 复跑同一大型任务的结果，单独记录在[《Fable effort 与派工复跑》](benchmarks/fable-effort-dispatch-rerun.md)，未并入下文表格。
+
 这些是 Model Boss 继承的前身测量;Model Boss 本身并未运行这套语料。所有数字来自前身真实的 headless `claude -p` 运行,通过 CLI 的分模型用量 JSON 直接测得,零估算。每个运行都通过了全部闸门(`tsc --noEmit` + `vitest`)和全部质量断言;**各配置的产出质量完全一致**,差别只在费用、额度和时间。
 
 ## 测试方法

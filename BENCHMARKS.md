@@ -6,6 +6,8 @@
 
 > Publication provenance: the predecessor identity was normalized to neutral labels, and its captured absolute workspace prefix was normalized to `<historical-workspace>`. Recorded tasks, gate output, outcomes, and token/cost/time measurements were not changed; the placeholder does not claim that these runs occurred under a Model Boss directory.
 
+A later rerun of the large task on the next Fable release, at low and medium effort and with Opus and Sonnet workers, is reported separately in [the Fable effort and dispatch rerun](benchmarks/fable-effort-dispatch-rerun.md); it is not folded into the tables below.
+
 These are predecessor measurements inherited by Model Boss; Model Boss did not run this corpus. All numbers come from real headless `claude -p` runs of that predecessor, measured via the CLI's per-model usage JSON — no estimation. Every run passed both gates (`tsc --noEmit` + `vitest`) and all quality assertions; **output quality was identical across conditions**. The differences are cost, quota, and time.
 
 ## Methodology

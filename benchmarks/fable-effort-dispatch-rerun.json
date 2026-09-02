@@ -1,0 +1,475 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-09-02",
+  "task": "large-greenfield-subsystem",
+  "cli_versions": {
+    "fable cells": "2.1.258",
+    "opus/sonnet cells": "2.1.246"
+  },
+  "cells": [
+    {
+      "cell": {
+        "name": "fable-low-inline",
+        "main_model": "claude-fable-5-1",
+        "main_effort": "low",
+        "mode": "inline",
+        "worker_model": null,
+        "worker_effort": null
+      },
+      "run_dir": "<runs>/fable-low-inline",
+      "launch": {
+        "status": "ok",
+        "returncode": 0,
+        "wall_seconds": 161.4
+      },
+      "usage": {
+        "total_cost_usd": 1.3136,
+        "fable_cost_usd": 1.3116,
+        "duration_ms": 160083,
+        "num_turns": 6,
+        "per_model": {
+          "claude-haiku-4-5-20251001": {
+            "input": 1924,
+            "output": 13,
+            "cache_read": 0,
+            "cache_write": 0,
+            "cost_usd": 0.002
+          },
+          "claude-fable-5-1": {
+            "input": 282,
+            "output": 15833,
+            "cache_read": 162565,
+            "cache_write": 23824,
+            "cost_usd": 1.3116
+          }
+        },
+        "final_text": "Done. The shopping-cart subsystem is built and both gates pass.\n\n**What I built** under `src/cart/` (eight ESM, strict-TypeScript modules):\n\n- **types.ts**: Money, Sku, LineItem, Cart, PricingBreakdown, Coupon, and a discriminated CartEvent union. I added a `cart-created` event so replay can learn the cart's id and currency, plus a `CartEventInput` type for events before the log assigns their seq.\n- **errors.ts**: CartError base with the five subclasses, each carrying a stable code such as `OUT_OF_STOCK`.\n- **cart.ts**: all seven operations. Every mutation takes an event log, returns a fresh c"
+      },
+      "grade": {
+        "typecheck_passed": true,
+        "tests_passed": true,
+        "tests_total": 63,
+        "cart_tests": 59,
+        "modules_present": [
+          "types.ts",
+          "errors.ts",
+          "cart.ts",
+          "pricing.ts",
+          "inventory.ts",
+          "coupons.ts",
+          "events.ts",
+          "serialization.ts"
+        ],
+        "modules_missing": [],
+        "edge_case_groups_covered": [
+          "tier-boundaries",
+          "coupons",
+          "inventory",
+          "corrupt-payload",
+          "event-ordering"
+        ],
+        "scope_violations": [],
+        "added_lines": 904,
+        "changed_files": 14,
+        "assertions": {
+          "gate-typecheck-passes": true,
+          "gate-tests-pass": true,
+          "all-eight-modules-present": true,
+          "forty-plus-cart-tests": true,
+          "edge-cases-covered": true,
+          "scope-respected": true
+        },
+        "pass_rate": 1.0
+      }
+    },
+    {
+      "cell": {
+        "name": "fable-medium-inline",
+        "main_model": "claude-fable-5-1",
+        "main_effort": "medium",
+        "mode": "inline",
+        "worker_model": null,
+        "worker_effort": null
+      },
+      "run_dir": "<runs>/fable-medium-inline",
+      "launch": {
+        "status": "ok",
+        "returncode": 0,
+        "wall_seconds": 181.4
+      },
+      "usage": {
+        "total_cost_usd": 1.6162,
+        "fable_cost_usd": 1.6142,
+        "duration_ms": 180036,
+        "num_turns": 7,
+        "per_model": {
+          "claude-haiku-4-5-20251001": {
+            "input": 1924,
+            "output": 14,
+            "cache_read": 0,
+            "cache_write": 0,
+            "cost_usd": 0.002
+          },
+          "claude-fable-5-1": {
+            "input": 338,
+            "output": 17967,
+            "cache_read": 192449,
+            "cache_write": 33220,
+            "cost_usd": 1.6142
+          }
+        },
+        "final_text": "Done. Both gates pass and only `src/cart/` and `tests/cart/` were added.\n\n**What I built** under `src/cart/`:\n\n- **types.ts**: `Money`, `Sku`, `Currency`, `LineItem`, `Cart`, `PricingBreakdown`, `Coupon`, and the `CartEvent` discriminated union. Each event carries `cartId`, `seq`, and `at`. I added a `cart-created` variant so replay knows the cart's id and currency.\n- **errors.ts**: `CartError` base with a stable `code`, plus the five subclasses using codes like `OUT_OF_STOCK` and `CORRUPT_PAYLOAD`.\n- **cart.ts**: all seven operations. Each takes the cart and the event log and returns a fresh "
+      },
+      "grade": {
+        "typecheck_passed": true,
+        "tests_passed": true,
+        "tests_total": 74,
+        "cart_tests": 70,
+        "modules_present": [
+          "types.ts",
+          "errors.ts",
+          "cart.ts",
+          "pricing.ts",
+          "inventory.ts",
+          "coupons.ts",
+          "events.ts",
+          "serialization.ts"
+        ],
+        "modules_missing": [],
+        "edge_case_groups_covered": [
+          "tier-boundaries",
+          "coupons",
+          "inventory",
+          "corrupt-payload",
+          "event-ordering"
+        ],
+        "scope_violations": [],
+        "added_lines": 951,
+        "changed_files": 14,
+        "assertions": {
+          "gate-typecheck-passes": true,
+          "gate-tests-pass": true,
+          "all-eight-modules-present": true,
+          "forty-plus-cart-tests": true,
+          "edge-cases-covered": true,
+          "scope-respected": true
+        },
+        "pass_rate": 1.0
+      }
+    },
+    {
+      "cell": {
+        "name": "fable-medium-lite-opus",
+        "main_model": "claude-fable-5-1",
+        "main_effort": "medium",
+        "mode": "lite",
+        "worker_model": "claude-opus-5",
+        "worker_effort": "high"
+      },
+      "run_dir": "<runs>/fable-medium-lite-opus",
+      "launch": {
+        "status": "ok",
+        "returncode": 0,
+        "wall_seconds": 435.2
+      },
+      "usage": {
+        "total_cost_usd": 2.6551,
+        "fable_cost_usd": 1.2591,
+        "duration_ms": 434038,
+        "num_turns": 13,
+        "per_model": {
+          "claude-haiku-4-5-20251001": {
+            "input": 1982,
+            "output": 13,
+            "cache_read": 0,
+            "cache_write": 0,
+            "cost_usd": 0.002
+          },
+          "claude-fable-5-1": {
+            "input": 594,
+            "output": 6243,
+            "cache_read": 403453,
+            "cache_write": 42007,
+            "cost_usd": 1.2591
+          },
+          "claude-opus-5[1m]": {
+            "input": 32,
+            "output": 33456,
+            "cache_read": 513318,
+            "cache_write": 48116,
+            "cost_usd": 1.3939
+          }
+        },
+        "final_text": "**MAIN_LOOP_REVIEW:** approve. Spec intent, module boundaries, edge cases, and scope all check out.\n\n**AUTHORITY_FINAL_CHECK (inline):** approve, bound to the current tree (baseline 298450d, worker delta = untracked `src/cart/` and `tests/cart/`, zero tracked-file diff). No revision rounds were needed.\n\n**INTEGRATE:** the worker's delta already sits in the working tree with no destination drift, and gates were re-run by me after it returned. Status `ok`. Nothing was committed, since that wasn't requested.\n\n## Summary\n\nThe `model-boss-implementer` worker (claude-opus-5 at high effort) built the"
+      },
+      "grade": {
+        "typecheck_passed": true,
+        "tests_passed": true,
+        "tests_total": 122,
+        "cart_tests": 118,
+        "modules_present": [
+          "types.ts",
+          "errors.ts",
+          "cart.ts",
+          "pricing.ts",
+          "inventory.ts",
+          "coupons.ts",
+          "events.ts",
+          "serialization.ts"
+        ],
+        "modules_missing": [],
+        "edge_case_groups_covered": [
+          "tier-boundaries",
+          "coupons",
+          "inventory",
+          "corrupt-payload",
+          "event-ordering"
+        ],
+        "scope_violations": [],
+        "added_lines": 1859,
+        "changed_files": 15,
+        "assertions": {
+          "gate-typecheck-passes": true,
+          "gate-tests-pass": true,
+          "all-eight-modules-present": true,
+          "forty-plus-cart-tests": true,
+          "edge-cases-covered": true,
+          "scope-respected": true
+        },
+        "pass_rate": 1.0
+      }
+    },
+    {
+      "cell": {
+        "name": "fable-medium-lite-sonnet",
+        "main_model": "claude-fable-5-1",
+        "main_effort": "medium",
+        "mode": "lite",
+        "worker_model": "claude-sonnet-5",
+        "worker_effort": "high"
+      },
+      "run_dir": "<runs>/fable-medium-lite-sonnet",
+      "launch": {
+        "status": "ok",
+        "returncode": 0,
+        "wall_seconds": 412.3
+      },
+      "usage": {
+        "total_cost_usd": 1.7287,
+        "fable_cost_usd": 1.0196,
+        "duration_ms": 410069,
+        "num_turns": 9,
+        "per_model": {
+          "claude-haiku-4-5-20251001": {
+            "input": 1982,
+            "output": 12,
+            "cache_read": 0,
+            "cache_write": 0,
+            "cost_usd": 0.002
+          },
+          "claude-fable-5-1": {
+            "input": 340,
+            "output": 6537,
+            "cache_read": 259005,
+            "cache_write": 31231,
+            "cost_usd": 1.0196
+          },
+          "claude-sonnet-5": {
+            "input": 48,
+            "output": 36867,
+            "cache_read": 1070175,
+            "cache_write": 49694,
+            "cost_usd": 0.707
+          }
+        },
+        "final_text": "**AUTHORITY_FINAL_CHECK (inline): approve.** All required edge cases are present by name in the tests, scope is exactly `src/cart/` plus `tests/cart/`, and I reran both gates myself. Integration is complete since the worker wrote directly into the working tree. Nothing is committed, per the instructions.\n\n## Summary\n\nThe Model Boss run completed in Lite mode with status `ok`. The worker was `model-boss-implementer` on Sonnet 5 at high effort. I held both authority checkpoints inline and did not write any cart code myself.\n\n**What was built** under `src/cart/`, one file each:\n\n- **types.ts**: `"
+      },
+      "grade": {
+        "typecheck_passed": true,
+        "tests_passed": true,
+        "tests_total": 81,
+        "cart_tests": 77,
+        "modules_present": [
+          "types.ts",
+          "errors.ts",
+          "cart.ts",
+          "pricing.ts",
+          "inventory.ts",
+          "coupons.ts",
+          "events.ts",
+          "serialization.ts"
+        ],
+        "modules_missing": [],
+        "edge_case_groups_covered": [
+          "tier-boundaries",
+          "coupons",
+          "inventory",
+          "corrupt-payload",
+          "event-ordering"
+        ],
+        "scope_violations": [],
+        "added_lines": 1280,
+        "changed_files": 15,
+        "assertions": {
+          "gate-typecheck-passes": true,
+          "gate-tests-pass": true,
+          "all-eight-modules-present": true,
+          "forty-plus-cart-tests": true,
+          "edge-cases-covered": true,
+          "scope-respected": true
+        },
+        "pass_rate": 1.0
+      }
+    },
+    {
+      "cell": {
+        "name": "opus-high-inline",
+        "main_model": "claude-opus-5",
+        "main_effort": "high",
+        "mode": "inline",
+        "worker_model": null,
+        "worker_effort": null
+      },
+      "run_dir": "<runs>/opus-high-inline",
+      "launch": {
+        "status": "ok",
+        "returncode": 0,
+        "wall_seconds": 479.3
+      },
+      "usage": {
+        "total_cost_usd": 2.1935,
+        "fable_cost_usd": 0,
+        "duration_ms": 477004,
+        "num_turns": 15,
+        "per_model": {
+          "claude-haiku-4-5-20251001": {
+            "input": 1924,
+            "output": 12,
+            "cache_read": 0,
+            "cache_write": 0,
+            "cost_usd": 0.002
+          },
+          "claude-opus-5": {
+            "input": 30,
+            "output": 47314,
+            "cache_read": 788262,
+            "cache_write": 61440,
+            "cost_usd": 2.1915
+          }
+        },
+        "final_text": "Done. Only new files added \u2014 no tracked file was touched.\n\n## What I built\n\n**`src/cart/` \u2014 eight modules, ESM, strict TS:**\n\n- **`types.ts`** \u2014 `Money` (integer minor units), `Sku`, `LineItem`, `Cart`, `PricingBreakdown`, `Coupon`, and a `CartEvent` discriminated union over the six event kinds. Also `SUPPORTED_CURRENCIES`/`Currency`/`isCurrency`, so `Cart.currency` is a checked union rather than a bare string.\n- **`errors.ts`** \u2014 `CartError` base carrying a stable `code`, plus the five subclasses with structured fields (`OutOfStockError.requested/available`, `CorruptPayloadError.field`, \u2026) an"
+      },
+      "grade": {
+        "typecheck_passed": true,
+        "tests_passed": true,
+        "tests_total": 108,
+        "cart_tests": 104,
+        "modules_present": [
+          "types.ts",
+          "errors.ts",
+          "cart.ts",
+          "pricing.ts",
+          "inventory.ts",
+          "coupons.ts",
+          "events.ts",
+          "serialization.ts"
+        ],
+        "modules_missing": [],
+        "edge_case_groups_covered": [
+          "tier-boundaries",
+          "coupons",
+          "inventory",
+          "corrupt-payload",
+          "event-ordering"
+        ],
+        "scope_violations": [],
+        "added_lines": 1734,
+        "changed_files": 14,
+        "assertions": {
+          "gate-typecheck-passes": true,
+          "gate-tests-pass": true,
+          "all-eight-modules-present": true,
+          "forty-plus-cart-tests": true,
+          "edge-cases-covered": true,
+          "scope-respected": true
+        },
+        "pass_rate": 1.0
+      }
+    },
+    {
+      "cell": {
+        "name": "sonnet-high-inline",
+        "main_model": "claude-sonnet-5",
+        "main_effort": "high",
+        "mode": "inline",
+        "worker_model": null,
+        "worker_effort": null
+      },
+      "run_dir": "<runs>/sonnet-high-inline",
+      "launch": {
+        "status": "ok",
+        "returncode": 0,
+        "wall_seconds": 258.0
+      },
+      "usage": {
+        "total_cost_usd": 0.8046,
+        "fable_cost_usd": 0,
+        "duration_ms": 256299,
+        "num_turns": 24,
+        "per_model": {
+          "claude-haiku-4-5-20251001": {
+            "input": 1924,
+            "output": 12,
+            "cache_read": 0,
+            "cache_write": 0,
+            "cost_usd": 0.002
+          },
+          "claude-sonnet-5": {
+            "input": 48,
+            "output": 32036,
+            "cache_read": 1387122,
+            "cache_write": 51178,
+            "cost_usd": 0.8026
+          }
+        },
+        "final_text": "Only `src/cart/` and `tests/cart/` were added; no existing files were touched. Both gates pass.\n\n## Summary\n\nBuilt the shopping-cart subsystem across 8 modules in `src/cart/`:\n- **types.ts** \u2014 `Money`, `Sku`, `LineItem`, `Cart`, `PricingBreakdown`, `Coupon`, and a `CartEvent` discriminated union (6 event kinds, each with `seq`/`at`/`cartId`).\n- **errors.ts** \u2014 `CartError` base + 5 subclasses, each with a stable `code`.\n- **events.ts** \u2014 `EventLog` with per-cart strictly-increasing `seq`, `append`, `eventsFor`, and `replay` (rejects empty/out-of-order sequences via `CorruptPayloadError`). Expor"
+      },
+      "grade": {
+        "typecheck_passed": true,
+        "tests_passed": true,
+        "tests_total": 70,
+        "cart_tests": 66,
+        "modules_present": [
+          "types.ts",
+          "errors.ts",
+          "cart.ts",
+          "pricing.ts",
+          "inventory.ts",
+          "coupons.ts",
+          "events.ts",
+          "serialization.ts"
+        ],
+        "modules_missing": [],
+        "edge_case_groups_covered": [
+          "tier-boundaries",
+          "coupons",
+          "inventory",
+          "corrupt-payload",
+          "event-ordering"
+        ],
+        "scope_violations": [],
+        "added_lines": 1012,
+        "changed_files": 15,
+        "assertions": {
+          "gate-typecheck-passes": true,
+          "gate-tests-pass": true,
+          "all-eight-modules-present": true,
+          "forty-plus-cart-tests": true,
+          "edge-cases-covered": true,
+          "scope-respected": true
+        },
+        "pass_rate": 1.0
+      }
+    }
+  ]
+}
