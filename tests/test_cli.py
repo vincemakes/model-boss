@@ -1413,7 +1413,8 @@ class RoutingUpgradeCliTests(unittest.TestCase):
         self.assertEqual(value["status"], "ok")
         self.assertEqual([plan["plan"] for plan in value["plans"]], ["inline", "lite", "max"])
         self.assertEqual(value["recommendation"], "lite")
-        self.assertIn("Recommendation (weighted): lite", value["table"])
+        self.assertEqual(value["objective"], "pace")
+        self.assertIn("Recommendation (pace): lite", value["table"])
         lite = value["plans"][1]
         self.assertEqual([role["model"] for role in lite["roles"]], ["claude-fable-5-1", "claude-sonnet-5"])
         self.assertLess(lite["main_model_usd"], value["plans"][0]["main_model_usd"])
@@ -1455,3 +1456,21 @@ class RoutingUpgradeCliTests(unittest.TestCase):
         value = json.loads(result.stdout)
         self.assertEqual(value["main_loop_effort"], "medium")
         self.assertIn("Main loop: conversation/claude-fable-5-1@medium", value["startup_verdict"])
+
+    def test_estimate_accepts_budget_pace_and_packets(self) -> None:
+        result = self._run(
+            "estimate", "--profile", "anthropic", "--main-model", "claude-fable-5-1",
+            "--main-effort", "medium", "--worker", "opus-5-worker", "--lines", "900", "--files", "9",
+            "--judgment", "low", "--packets", "3", "--total-used", "40", "--fable-used", "70", "--week-elapsed", "40",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["regime"], "fable_ahead")
+        self.assertEqual(value["recommendation"], "lite")
+        self.assertAlmostEqual(value["budget"]["capped_share_of_spend"], 0.875)
+        self.assertTrue(any("next session" in reason for reason in value["reasons"]))
+        partial = self._run(
+            "estimate", "--profile", "anthropic", "--main-model", "claude-fable-5-1",
+            "--worker", "opus-5-worker", "--lines", "900", "--files", "9", "--total-used", "40",
+        )
+        self.assertEqual(partial.returncode, 2)

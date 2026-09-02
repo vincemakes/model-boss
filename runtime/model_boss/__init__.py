@@ -20,6 +20,7 @@ from .config import (
     load_profile_data,
 )
 from .dispatch import (
+    Budget,
     DispatchEstimate,
     PlanEstimate,
     RoleSpec,
@@ -53,6 +54,7 @@ __all__ = [
     "EFFORT_LEVELS",
     "SCHEMA_VERSION",
     "CapabilityBand",
+    "Budget",
     "CatalogModel",
     "DispatchEstimate",
     "MentionReport",

@@ -4,11 +4,18 @@ import unittest
 
 from runtime.model_boss.dispatch import (
     DELEGATION_FLOOR_LINES,
+    LITE_FLOOR_LINES,
+    Budget,
     ModelPrices,
     RoleSpec,
     TaskShape,
     estimate_dispatch,
 )
+
+
+def _weighted(*args, **kwargs):
+    kwargs.setdefault("objective", "weighted")
+    return estimate_dispatch(*args, **kwargs)
 
 
 def _role(
@@ -49,11 +56,13 @@ class TaskShapeTests(unittest.TestCase):
 
 
 class EstimateTests(unittest.TestCase):
+    """Cost objectives (`weighted`, `main-model`); pace policy is covered below."""
+
     def test_anchors_match_the_recorded_fable_5_1_rerun_within_tolerance(self) -> None:
         """benchmarks/fable-effort-dispatch-rerun.json, CLI costUSD per cell."""
 
-        low = estimate_dispatch(TaskShape(904, 14, "low"), FABLE_LOW, worker=SONNET_WORKER).plan("inline")
-        medium = estimate_dispatch(TaskShape(951, 14, "low"), FABLE_MEDIUM, worker=SONNET_WORKER).plan("inline")
+        low = _weighted(TaskShape(904, 14, "low"), FABLE_LOW, worker=SONNET_WORKER).plan("inline")
+        medium = _weighted(TaskShape(951, 14, "low"), FABLE_MEDIUM, worker=SONNET_WORKER).plan("inline")
         assert low and medium
         self.assertAlmostEqual(low.total_usd, 1.31, delta=0.20)  # measured fable-low-inline
         self.assertAlmostEqual(medium.total_usd, 1.61, delta=0.20)  # measured fable-medium-inline
@@ -61,14 +70,14 @@ class EstimateTests(unittest.TestCase):
 
         # Lite main loop at medium: measured $1.02 (Sonnet worker) and $1.26 (Opus worker);
         # the estimate takes the spec size, so compare at the inline line counts scaled by volume.
-        lite_sonnet = estimate_dispatch(TaskShape(951, 14, "low"), FABLE_MEDIUM, worker=SONNET_WORKER).plan("lite")
+        lite_sonnet = _weighted(TaskShape(951, 14, "low"), FABLE_MEDIUM, worker=SONNET_WORKER).plan("lite")
         assert lite_sonnet
         self.assertAlmostEqual(lite_sonnet.roles[0].cost_usd, 1.02, delta=0.25)
         # Worker-side error is the widest: Sonnet 5 churned 1.07M cache reads, Opus 5 wrote 1,859 lines.
         self.assertAlmostEqual(lite_sonnet.roles[1].cost_usd, 0.71, delta=0.32)
 
         # The historical Fable 5 high anchor still reproduces at effort high.
-        high = estimate_dispatch(TaskShape(1100, 8, "low"), FABLE, worker=SONNET_WORKER).plan("inline")
+        high = _weighted(TaskShape(1100, 8, "low"), FABLE, worker=SONNET_WORKER).plan("inline")
         assert high
         self.assertEqual(high.roles[0].usage.output_tokens, 30_940)
         self.assertEqual(high.roles[0].usage.cache_read_tokens, 398_400)
@@ -85,15 +94,15 @@ class EstimateTests(unittest.TestCase):
         task = TaskShape(1000, 14, "low")
         # An Opus worker under a Fable main loop never wins on total spend.
         for main in (FABLE_LOW, FABLE_MEDIUM, FABLE):
-            lite = estimate_dispatch(task, main, worker=OPUS_WORKER)
+            lite = _weighted(task, main, worker=OPUS_WORKER)
             assert lite.plan("lite") and lite.plan("inline")
             self.assertGreater(lite.plan("lite").total_usd, lite.plan("inline").total_usd * 0.9)
         # A Sonnet worker beats Fable at high effort but not Fable at low or medium.
-        self.assertEqual(estimate_dispatch(task, FABLE, worker=SONNET_WORKER).recommendation, "lite")
-        self.assertEqual(estimate_dispatch(task, FABLE_LOW, worker=SONNET_WORKER).recommendation, "inline")
-        self.assertEqual(estimate_dispatch(task, FABLE_MEDIUM, worker=SONNET_WORKER).recommendation, "inline")
+        self.assertEqual(_weighted(task, FABLE, worker=SONNET_WORKER).recommendation, "lite")
+        self.assertEqual(_weighted(task, FABLE_LOW, worker=SONNET_WORKER).recommendation, "inline")
+        self.assertEqual(_weighted(task, FABLE_MEDIUM, worker=SONNET_WORKER).recommendation, "inline")
         # On the main-model objective a Sonnet worker still cuts Fable spend by roughly a third.
-        by_fable = estimate_dispatch(task, FABLE_MEDIUM, worker=SONNET_WORKER, objective="main-model")
+        by_fable = _weighted(task, FABLE_MEDIUM, worker=SONNET_WORKER, objective="main-model")
         self.assertEqual(by_fable.recommendation, "lite")
         lite_plan = by_fable.plan("lite")
         inline_plan = by_fable.plan("inline")
@@ -101,32 +110,32 @@ class EstimateTests(unittest.TestCase):
         self.assertLess(lite_plan.main_model_usd, inline_plan.main_model_usd * 0.75)
 
     def test_small_tasks_stay_inline(self) -> None:
-        estimate = estimate_dispatch(TaskShape(DELEGATION_FLOOR_LINES - 1, 2), FABLE, worker=OPUS_WORKER)
+        estimate = _weighted(TaskShape(DELEGATION_FLOOR_LINES - 1, 2), FABLE, worker=OPUS_WORKER)
         self.assertEqual(estimate.recommendation, "inline")
         self.assertIn("delegation floor", estimate.reasons[0])
 
     def test_judgment_dense_work_stays_inline_regardless_of_size(self) -> None:
-        estimate = estimate_dispatch(TaskShape(2000, 20, "high"), FABLE, worker=SONNET_WORKER)
+        estimate = _weighted(TaskShape(2000, 20, "high"), FABLE, worker=SONNET_WORKER)
         self.assertEqual(estimate.recommendation, "inline")
         self.assertIn("reasoning is the workload", estimate.reasons[0])
 
     def test_unclear_spec_needs_context(self) -> None:
-        estimate = estimate_dispatch(TaskShape(900, 9, spec="unclear"), FABLE, worker=SONNET_WORKER)
+        estimate = _weighted(TaskShape(900, 9, spec="unclear"), FABLE, worker=SONNET_WORKER)
         self.assertEqual(estimate.recommendation, "needs_context")
 
     def test_opus_worker_only_pays_when_fable_quota_is_weighted_scarcer(self) -> None:
         task = TaskShape(1100, 8, "low")
-        unweighted = estimate_dispatch(task, FABLE, worker=OPUS_WORKER)
+        unweighted = _weighted(task, FABLE, worker=OPUS_WORKER)
         self.assertEqual(unweighted.recommendation, "inline")
         scarce_fable = _role("main loop", "claude-fable-5-1", weight=3.0)
-        weighted = estimate_dispatch(task, scarce_fable, worker=OPUS_WORKER)
+        weighted = _weighted(task, scarce_fable, worker=OPUS_WORKER)
         self.assertEqual(weighted.recommendation, "lite")
-        main_model = estimate_dispatch(task, FABLE, worker=OPUS_WORKER, objective="main-model")
+        main_model = _weighted(task, FABLE, worker=OPUS_WORKER, objective="main-model")
         self.assertEqual(main_model.recommendation, "lite")
         self.assertTrue(any("quota-arbitrage" in reason for reason in main_model.reasons))
 
     def test_sonnet_worker_wins_on_the_price_proxy_for_large_constructive_work(self) -> None:
-        estimate = estimate_dispatch(TaskShape(1100, 8, "low"), FABLE, worker=SONNET_WORKER)
+        estimate = _weighted(TaskShape(1100, 8, "low"), FABLE, worker=SONNET_WORKER)
         self.assertEqual(estimate.recommendation, "lite")
         lite = estimate.plan("lite")
         inline = estimate.plan("inline")
@@ -136,8 +145,8 @@ class EstimateTests(unittest.TestCase):
 
     def test_lower_main_effort_shrinks_inline_cost_and_favors_inline(self) -> None:
         low = _role("main loop", "claude-fable-5-1", effort="low")
-        high = estimate_dispatch(TaskShape(600, 6, "low"), FABLE, worker=SONNET_WORKER)
-        cheap = estimate_dispatch(TaskShape(600, 6, "low"), low, worker=SONNET_WORKER)
+        high = _weighted(TaskShape(600, 6, "low"), FABLE, worker=SONNET_WORKER)
+        cheap = _weighted(TaskShape(600, 6, "low"), low, worker=SONNET_WORKER)
         high_inline = high.plan("inline")
         cheap_inline = cheap.plan("inline")
         assert high_inline and cheap_inline
@@ -145,9 +154,9 @@ class EstimateTests(unittest.TestCase):
         self.assertEqual(cheap.recommendation, "inline")
 
     def test_rework_probability_raises_delegated_cost(self) -> None:
-        low = estimate_dispatch(TaskShape(800, 8, "low"), FABLE, worker=SONNET_WORKER).plan("lite")
-        medium = estimate_dispatch(TaskShape(800, 8, "medium"), FABLE, worker=SONNET_WORKER).plan("lite")
-        mechanical = estimate_dispatch(
+        low = _weighted(TaskShape(800, 8, "low"), FABLE, worker=SONNET_WORKER).plan("lite")
+        medium = _weighted(TaskShape(800, 8, "medium"), FABLE, worker=SONNET_WORKER).plan("lite")
+        mechanical = _weighted(
             TaskShape(800, 8, "medium", mechanical=True), FABLE, worker=SONNET_WORKER
         ).plan("lite")
         assert low and medium and mechanical
@@ -155,7 +164,7 @@ class EstimateTests(unittest.TestCase):
         self.assertLess(mechanical.total_usd, low.total_usd)
 
     def test_max_is_priced_with_the_reviewer_listed_first(self) -> None:
-        estimate = estimate_dispatch(TaskShape(1100, 8, "low"), OPUS_MAIN, reviewer=FABLE_REVIEWER)
+        estimate = _weighted(TaskShape(1100, 8, "low"), OPUS_MAIN, reviewer=FABLE_REVIEWER)
         max_plan = estimate.plan("max")
         inline = estimate.plan("inline")
         assert max_plan and inline
@@ -168,19 +177,19 @@ class EstimateTests(unittest.TestCase):
         # Against an Opus main loop already doing the work inline, Max adds spend on both
         # objectives: it is a quality/authority choice, not a quota saving.
         for objective in ("weighted", "main-model"):
-            result = estimate_dispatch(
+            result = _weighted(
                 TaskShape(1100, 8, "low"), OPUS_MAIN, reviewer=FABLE_REVIEWER, objective=objective
             )
             self.assertEqual(result.recommendation, "inline", objective)
 
     def test_same_model_worker_is_flagged(self) -> None:
-        estimate = estimate_dispatch(TaskShape(900, 9, "low"), FABLE, worker=_role("worker fable-5.1-worker", "claude-fable-5-1", effort="medium"))
+        estimate = _weighted(TaskShape(900, 9, "low"), FABLE, worker=_role("worker fable-5.1-worker", "claude-fable-5-1", effort="medium"))
         lite = estimate.plan("lite")
         assert lite
         self.assertTrue(any("same model as the main loop" in note for note in lite.notes))
 
     def test_table_renders_every_plan_and_the_recommendation(self) -> None:
-        estimate = estimate_dispatch(TaskShape(1100, 8, "low"), FABLE, worker=SONNET_WORKER, reviewer=_role("reviewer opus-5", "claude-opus-5"))
+        estimate = _weighted(TaskShape(1100, 8, "low"), FABLE, worker=SONNET_WORKER, reviewer=_role("reviewer opus-5", "claude-opus-5"))
         table = estimate.table()
         for token in ("inline", "lite", "max", "Recommendation (weighted):", "main-model"):
             self.assertIn(token, table)
@@ -188,3 +197,79 @@ class EstimateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PacePolicyTests(unittest.TestCase):
+    """Default objective: strongest topology within the week's pace."""
+
+    def test_regime_classification(self) -> None:
+        self.assertEqual(Budget(40, 40, 40).regime(), "on_pace")
+        self.assertEqual(Budget(40, 60, 40).regime(), "fable_ahead")  # capped half burning fast
+        self.assertEqual(Budget(60, 70, 40).regime(), "fable_ahead")  # share of spend 58%
+        self.assertEqual(Budget(40, 20, 40).regime(), "fable_behind")
+        self.assertEqual(Budget(50, 98, 60).regime(), "fable_exhausted")
+        self.assertEqual(Budget(100, 50, 90).regime(), "total_exhausted")
+        self.assertEqual(Budget(2, 3, 3).regime(), "on_pace")  # too early to judge
+        self.assertAlmostEqual(Budget(40, 40, 40).capped_spend_share() or 0, 0.5)
+        with self.assertRaises(ValueError):
+            Budget(-1, 0, 0)
+
+    def test_execution_heavy_work_goes_lite_by_default(self) -> None:
+        estimate = estimate_dispatch(TaskShape(1200, 15, "low"), FABLE_MEDIUM, worker=OPUS_WORKER)
+        self.assertEqual(estimate.objective, "pace")
+        self.assertEqual(estimate.regime, "unknown")
+        self.assertEqual(estimate.recommendation, "lite")
+        self.assertTrue(any("50%" in reason for reason in estimate.reasons))
+
+    def test_parallel_packets_go_lite_even_when_small(self) -> None:
+        estimate = estimate_dispatch(TaskShape(150, 6, "low", packets=3), FABLE_MEDIUM, worker=OPUS_WORKER)
+        self.assertEqual(estimate.recommendation, "lite")
+        self.assertTrue(any("3 independent packets" in reason for reason in estimate.reasons))
+
+    def test_the_four_exceptions_stay_inline_or_switch(self) -> None:
+        # judgment-dense
+        self.assertEqual(
+            estimate_dispatch(TaskShape(900, 9, "high"), FABLE_MEDIUM, worker=OPUS_WORKER).recommendation,
+            "inline",
+        )
+        # small single packet
+        small = estimate_dispatch(TaskShape(LITE_FLOOR_LINES - 1, 3, "low"), FABLE_MEDIUM, worker=OPUS_WORKER)
+        self.assertEqual(small.recommendation, "inline")
+        self.assertIn(str(LITE_FLOOR_LINES), small.reasons[0])
+        # capped half ahead of pace with a Fable main loop: Lite still, but advised to switch next session
+        ahead = estimate_dispatch(
+            TaskShape(900, 9, "low"), FABLE_MEDIUM, worker=OPUS_WORKER, budget=Budget(40, 70, 40)
+        )
+        self.assertEqual(ahead.regime, "fable_ahead")
+        self.assertEqual(ahead.recommendation, "lite")
+        self.assertTrue(any("next session" in reason for reason in ahead.reasons))
+        # capped half exhausted with a Fable main loop
+        exhausted = estimate_dispatch(
+            TaskShape(900, 9, "low"), FABLE_MEDIUM, worker=OPUS_WORKER, budget=Budget(60, 99, 70)
+        )
+        self.assertEqual(exhausted.recommendation, "switch-main-loop")
+
+    def test_opus_main_loop_ahead_of_pace_uses_max(self) -> None:
+        estimate = estimate_dispatch(
+            TaskShape(900, 9, "low"), OPUS_MAIN, reviewer=FABLE_REVIEWER, budget=Budget(40, 70, 40)
+        )
+        self.assertEqual(estimate.recommendation, "max")
+
+    def test_unclear_spec_and_exhausted_total_need_context(self) -> None:
+        self.assertEqual(
+            estimate_dispatch(TaskShape(900, 9, spec="unclear"), FABLE_MEDIUM, worker=OPUS_WORKER).recommendation,
+            "needs_context",
+        )
+        self.assertEqual(
+            estimate_dispatch(TaskShape(900, 9), FABLE_MEDIUM, worker=OPUS_WORKER, budget=Budget(100, 50, 90)).recommendation,
+            "needs_context",
+        )
+
+    def test_table_shows_budget_and_regime(self) -> None:
+        estimate = estimate_dispatch(
+            TaskShape(900, 9, "low", packets=2), FABLE_MEDIUM, worker=OPUS_WORKER, budget=Budget(40, 40, 40)
+        )
+        table = estimate.table()
+        self.assertIn("regime on_pace", table)
+        self.assertIn("2 packets", table)
+        self.assertIn("Recommendation (pace): lite", table)

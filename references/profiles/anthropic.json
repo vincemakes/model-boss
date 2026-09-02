@@ -60,7 +60,7 @@
       "model": "claude-opus-5",
       "provider_family": "anthropic",
       "variant": "default",
-      "effort": "high"
+      "effort": "xhigh"
     },
     "opus-4.8": {
       "transport": "host-subagent",
@@ -80,7 +80,7 @@
       "model": "claude-opus-4-8",
       "provider_family": "anthropic",
       "variant": "default",
-      "effort": "high"
+      "effort": "xhigh"
     },
     "opus-4.7": {
       "transport": "host-subagent",
@@ -100,7 +100,7 @@
       "model": "claude-opus-4-7",
       "provider_family": "anthropic",
       "variant": "default",
-      "effort": "high"
+      "effort": "xhigh"
     },
     "opus-4.6": {
       "transport": "host-subagent",
@@ -130,7 +130,7 @@
       "model": "claude-sonnet-5",
       "provider_family": "anthropic",
       "variant": "default",
-      "effort": "high"
+      "effort": "xhigh"
     },
     "sonnet-4.6": {
       "transport": "host-subagent",

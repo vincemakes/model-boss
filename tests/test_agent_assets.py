@@ -22,7 +22,7 @@ CLAUDE_MODELS = {
 
 CLAUDE_EFFORTS = {
     "reviewer": "high",
-    "implementer": "high",
+    "implementer": "xhigh",
     "mechanic": None,
     "scout": None,
 }

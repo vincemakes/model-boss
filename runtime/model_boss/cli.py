@@ -89,10 +89,12 @@ from .transport import execute_reviewer, probe_route
 from .catalog import CATALOG_SNAPSHOT_DATE, find_model, match_model_mentions
 from .dispatch import (
     DEFAULT_CACHE_TTL,
+    DEFAULT_OBJECTIVE,
     JUDGMENT_LEVELS,
     OBJECTIVES,
     SPEC_LEVELS,
     SUBAGENT_CACHE_TTL,
+    Budget,
     RoleSpec,
     TaskShape,
     estimate_dispatch,
@@ -117,7 +119,7 @@ _COMMANDS = (
 _COMMAND_HELP = {
     "resolve": "resolve Lite/Max from explicit main-loop facts and live route probes",
     "match-models": "match spoken model names in a request to configured routes without guessing",
-    "estimate": "price inline versus Lite versus Max for one task shape before dispatch",
+    "estimate": "choose inline, Lite, or Max for one task shape within the week's quota pace",
     "plan-review": "approve and seal the exact Max plan before worker dispatch",
     "review": "review one sealed bundle and persist an invocation-bound approval receipt",
     "worker": "run an OS-sandboxed external worker and seal its delta",
@@ -1043,13 +1045,26 @@ def _run_estimate_command(arguments: argparse.Namespace) -> int:
             judgment=arguments.judgment,
             spec=arguments.spec,
             mechanical=bool(arguments.mechanical),
+            packets=arguments.packets,
         )
+        budget_values = (arguments.total_used, arguments.fable_used, arguments.week_elapsed)
+        if any(value is not None for value in budget_values):
+            if any(value is None for value in budget_values):
+                raise ValueError("--total-used, --fable-used, and --week-elapsed go together")
+            budget = Budget(
+                total_used_pct=float(arguments.total_used),
+                capped_used_pct=float(arguments.fable_used),
+                week_elapsed_pct=float(arguments.week_elapsed),
+            )
+        else:
+            budget = None
         estimate = estimate_dispatch(
             task,
             main,
             worker=worker,
             reviewer=reviewer,
             objective=arguments.objective,
+            budget=budget,
         )
     except LookupError:
         print(
@@ -1090,11 +1105,22 @@ def _run_estimate_command(arguments: argparse.Namespace) -> int:
     status = (
         Status.NEEDS_CONTEXT if estimate.recommendation == "needs_context" else Status.OK
     )
+    budget_summary = None
+    if estimate.budget is not None:
+        share = estimate.budget.capped_spend_share()
+        budget_summary = {
+            "total_used_pct": estimate.budget.total_used_pct,
+            "capped_used_pct": estimate.budget.capped_used_pct,
+            "week_elapsed_pct": estimate.budget.week_elapsed_pct,
+            "capped_share_of_spend": None if share is None else round(share, 3),
+        }
     print(
         _json_output(
             status,
             catalog_snapshot=CATALOG_SNAPSHOT_DATE,
             objective=estimate.objective,
+            regime=estimate.regime,
+            budget=budget_summary,
             recommendation=estimate.recommendation,
             reasons=list(estimate.reasons),
             plans=plans,
@@ -2447,7 +2473,11 @@ def build_parser() -> argparse.ArgumentParser:
             child.add_argument("--judgment", choices=JUDGMENT_LEVELS, default="medium")
             child.add_argument("--spec", choices=SPEC_LEVELS, default="clear")
             child.add_argument("--mechanical", action="store_true")
-            child.add_argument("--objective", choices=OBJECTIVES, default="weighted")
+            child.add_argument("--packets", type=int, default=1)
+            child.add_argument("--objective", choices=OBJECTIVES, default=DEFAULT_OBJECTIVE)
+            child.add_argument("--total-used", type=float, help="percent of the weekly total already used")
+            child.add_argument("--fable-used", type=float, help="percent of the capped (Fable) half already used")
+            child.add_argument("--week-elapsed", type=float, help="percent of the week already elapsed")
             child.add_argument("--main-ttl", choices=("5m", "1h"), default=DEFAULT_CACHE_TTL)
             child.add_argument("--subagent-ttl", choices=("5m", "1h"), default=SUBAGENT_CACHE_TTL)
         elif name == "plan-review":

@@ -11,6 +11,14 @@ with the catalog's per-token rates, weighted by each route's ``quota_weight``.
 * ``max``:    a distinct reviewer holds authority; the main loop coordinates and
               either implements itself or dispatches a worker.
 
+Three objectives choose between them.  ``pace`` (the default) is for subscription
+users who are not cost-sensitive: the weekly quota is one shared pool with a cap
+on the strongest model's share, so the estimate picks the strongest topology
+that keeps both the total and the capped half on pace, and only steps aside for
+judgment-dense work, small single-packet changes, or an exhausted half.
+``weighted`` minimises the quota-weighted price proxy and ``main-model`` the
+main loop's own spend; both are for cost-sensitive or pay-per-token use.
+
 The coefficients are anchored to two recorded data sets: the historical
 Fable 5 run in ``BENCHMARKS.md`` (a ~1,100-line greenfield subsystem at high
 effort) and the 2026-09 Fable 5.1 rerun in
@@ -33,7 +41,16 @@ from .models import EFFORT_LEVELS
 JUDGMENT_LEVELS: tuple[str, ...] = ("low", "medium", "high")
 SPEC_LEVELS: tuple[str, ...] = ("clear", "partial", "unclear")
 PLAN_NAMES: tuple[str, ...] = ("inline", "lite", "max")
-OBJECTIVES: tuple[str, ...] = ("weighted", "main-model")
+OBJECTIVES: tuple[str, ...] = ("pace", "weighted", "main-model")
+DEFAULT_OBJECTIVE = "pace"
+REGIMES: tuple[str, ...] = (
+    "unknown",
+    "on_pace",
+    "fable_behind",
+    "fable_ahead",
+    "fable_exhausted",
+    "total_exhausted",
+)
 
 # tokens = fixed + per_line * changed_lines, at effort `high` (multiplier 1.0).
 # Anchors: BENCHMARKS.md Fable 5 high run, 1,100 lines: out 30,993 / cache write
@@ -105,20 +122,32 @@ EFFORT_OUTPUT_MULTIPLIER: Mapping[str, float] = {
     "max": 1.8,
 }
 DELEGATION_FLOOR_LINES = 60
+# Under the pace objective a single-packet hand-off must clear this size: below
+# it the packet and review cost more of the capped model than typing the change
+# (recorded small tasks: +34%..+66%), and a serial hand-off is slower.
+LITE_FLOOR_LINES = 200
 DELEGATION_MARGIN = 0.10
+# Share of weekly spend the capped model should hold when both halves deplete
+# together; Lite with an Opus worker measured 48% on the recorded task.
+TARGET_CAPPED_SHARE = 0.5
 DEFAULT_CACHE_TTL = "1h"
 SUBAGENT_CACHE_TTL = "5m"
 
 
 @dataclass(frozen=True)
 class TaskShape:
-    """What the calculus needs to know about the task, nothing more."""
+    """What the calculus needs to know about the task, nothing more.
+
+    ``packets`` is the number of independent, non-overlapping work packets the
+    task splits into; two or more can run as parallel workers under one plan.
+    """
 
     changed_lines: int
     files: int
     judgment: str = "medium"
     spec: str = "clear"
     mechanical: bool = False
+    packets: int = 1
 
     def __post_init__(self) -> None:
         for name in ("changed_lines", "files"):
@@ -131,6 +160,60 @@ class TaskShape:
             raise ValueError("spec must be clear, partial, or unclear")
         if not isinstance(self.mechanical, bool):
             raise ValueError("mechanical must be a boolean")
+        if isinstance(self.packets, bool) or not isinstance(self.packets, int) or self.packets < 1:
+            raise ValueError("packets must be a positive integer")
+
+
+@dataclass(frozen=True)
+class Budget:
+    """Where the week stands: one shared weekly total with a cap on one model's share.
+
+    ``total_used_pct`` is the share of the weekly total already spent,
+    ``capped_used_pct`` the share of the capped model's own allowance already
+    spent (the Fable half on a Claude Max plan), ``week_elapsed_pct`` how much of
+    the week has passed.  All three are percentages the user reads off the
+    host's usage view.
+    """
+
+    total_used_pct: float
+    capped_used_pct: float
+    week_elapsed_pct: float
+    capped_share: float = TARGET_CAPPED_SHARE
+
+    def __post_init__(self) -> None:
+        for name in ("total_used_pct", "capped_used_pct", "week_elapsed_pct"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or not 0 <= float(value) <= 200:
+                raise ValueError(f"{name} must be a percentage between 0 and 200")
+        if not 0 < float(self.capped_share) < 1:
+            raise ValueError("capped_share must be between 0 and 1")
+
+    def capped_spend_share(self) -> float | None:
+        """Share of all spend so far that went to the capped model (target 0.5)."""
+
+        if self.total_used_pct <= 0:
+            return None
+        return (self.capped_used_pct * self.capped_share) / self.total_used_pct
+
+    def pace(self, used_pct: float) -> float | None:
+        if self.week_elapsed_pct < 5:
+            return None
+        return used_pct / self.week_elapsed_pct
+
+    def regime(self) -> str:
+        if self.total_used_pct >= 100:
+            return "total_exhausted"
+        if self.capped_used_pct >= 97:
+            return "fable_exhausted"
+        share = self.capped_spend_share()
+        capped_pace = self.pace(self.capped_used_pct)
+        if capped_pace is None or self.total_used_pct < 5 or share is None:
+            return "on_pace"
+        if capped_pace > 1.15 or share > 0.55:
+            return "fable_ahead"
+        if capped_pace < 0.85 and share < 0.45:
+            return "fable_behind"
+        return "on_pace"
 
 
 @dataclass(frozen=True)
@@ -278,6 +361,8 @@ class DispatchEstimate:
     plans: tuple[PlanEstimate, ...]
     recommendation: str
     reasons: tuple[str, ...]
+    regime: str = "unknown"
+    budget: Budget | None = None
 
     def plan(self, name: str) -> PlanEstimate | None:
         return next((plan for plan in self.plans if plan.plan == name), None)
@@ -288,7 +373,19 @@ class DispatchEstimate:
         lines = [
             f"Task: {self.task.changed_lines} lines / {self.task.files} files / "
             f"judgment {self.task.judgment} / spec {self.task.spec}"
-            + (" / mechanical" if self.task.mechanical else ""),
+            + (" / mechanical" if self.task.mechanical else "")
+            + (f" / {self.task.packets} packets" if self.task.packets > 1 else ""),
+        ]
+        if self.budget is not None:
+            share = self.budget.capped_spend_share()
+            lines.append(
+                f"Budget: total {self.budget.total_used_pct:.0f}% used, capped half "
+                f"{self.budget.capped_used_pct:.0f}% used, week {self.budget.week_elapsed_pct:.0f}% "
+                f"elapsed, capped share of spend "
+                + (f"{share:.0%}" if share is not None else "n/a")
+                + f" (target {TARGET_CAPPED_SHARE:.0%}); regime {self.regime}"
+            )
+        lines += [
             f"{'plan':<8}{'role':<34}{'output':>9}{'reads':>10}{'usd':>8}{'weighted':>10}",
         ]
         for plan in self.plans:
@@ -338,6 +435,12 @@ def _cost(role: RoleSpec, usage: Usage) -> RoleCost:
     return RoleCost(role, usage, round(cost, 4), round(cost * role.quota_weight, 4))
 
 
+def is_capped_model(model_id: str) -> bool:
+    """The Claude Max plan caps Fable's share of the weekly total; other models share the rest."""
+
+    return "fable" in model_id.lower()
+
+
 def _plan(
     plan: str,
     costs: tuple[RoleCost, ...],
@@ -366,7 +469,8 @@ def estimate_dispatch(
     *,
     worker: RoleSpec | None = None,
     reviewer: RoleSpec | None = None,
-    objective: str = "weighted",
+    objective: str = DEFAULT_OBJECTIVE,
+    budget: Budget | None = None,
 ) -> DispatchEstimate:
     """Compare inline, Lite, and Max for one task and recommend one of them.
 
@@ -375,16 +479,19 @@ def estimate_dispatch(
     only priced when a reviewer is supplied, and its note records that Max also
     needs a balanced main loop or an explicit Max request to resolve.
 
-    ``objective`` selects what the recommendation minimises: ``weighted`` is the
-    quota-weighted price proxy across every role; ``main-model`` is the spend
-    billed to the main loop's own model, which is the window a subscription user
-    usually watches.  Both are printed either way.
+    ``objective`` selects the policy.  ``pace`` (default) picks the strongest
+    topology that keeps the shared weekly total and the capped model's half on
+    pace, using ``budget`` when given; ``weighted`` minimises the quota-weighted
+    price proxy across every role; ``main-model`` minimises the spend billed to
+    the main loop's own model.  The cost table is printed either way.
     """
 
     if not isinstance(task, TaskShape) or not isinstance(main, RoleSpec):
         raise ValueError("task must be TaskShape and main must be RoleSpec")
     if objective not in OBJECTIVES:
-        raise ValueError("objective must be weighted or main-model")
+        raise ValueError("objective must be pace, weighted, or main-model")
+    if budget is not None and not isinstance(budget, Budget):
+        raise ValueError("budget must be a Budget or null")
     lines = task.changed_lines
     rework = _rework_probability(task)
     plans: list[PlanEstimate] = []
@@ -451,14 +558,105 @@ def estimate_dispatch(
             )
         plans.append(_plan("max", costs, main, notes))
 
-    recommendation, reasons = _recommend(task, tuple(plans), objective)
+    regime = budget.regime() if budget is not None else "unknown"
+    if objective == "pace":
+        recommendation, reasons = _recommend_pace(
+            task, tuple(plans), main, worker, reviewer, regime
+        )
+    else:
+        recommendation, reasons = _recommend(task, tuple(plans), objective)
     return DispatchEstimate(
         task=task,
         objective=objective,
         plans=tuple(plans),
         recommendation=recommendation,
         reasons=reasons,
+        regime=regime,
+        budget=budget,
     )
+
+
+def _recommend_pace(
+    task: TaskShape,
+    plans: tuple[PlanEstimate, ...],
+    main: RoleSpec,
+    worker: RoleSpec | None,
+    reviewer: RoleSpec | None,
+    regime: str,
+) -> tuple[str, tuple[str, ...]]:
+    """Strongest topology within pace; step aside only where a hand-off adds nothing."""
+
+    main_is_capped = is_capped_model(main.model_id)
+    has_max = any(plan.plan == "max" for plan in plans)
+    if task.spec == "unclear":
+        return "needs_context", (
+            "acceptance criteria cannot be stated yet; clarify before any dispatch",
+        )
+    if regime == "total_exhausted":
+        return "needs_context", (
+            "the weekly total is exhausted; nothing can run until the window resets",
+        )
+    if regime == "fable_exhausted" and main_is_capped:
+        return "switch-main-loop", (
+            "the capped half is exhausted while this session's main loop is the capped model",
+            "start the next session on Opus 5 at xhigh; if any capped allowance remains, spend it "
+            "only as the Max reviewer's two checkpoints",
+        )
+    if task.judgment == "high":
+        reasons = [
+            "judgment-dense work: the reasoning is the workload, so a hand-off adds latency and "
+            "reading cost without adding execution value (recorded blind bug-hunt: same result, 3.9x time)",
+        ]
+        if regime == "fable_ahead" and main_is_capped:
+            reasons.append(
+                "the capped half is ahead of pace: keep judgment work here, but move the week's "
+                "routine tasks to Max or Opus sessions to pull the share back toward 50%"
+            )
+        return "inline", tuple(reasons)
+    execution_heavy = task.packets >= 2 or task.changed_lines >= LITE_FLOOR_LINES
+    if not execution_heavy:
+        return "inline", (
+            f"under {LITE_FLOOR_LINES} changed lines in a single packet: the packet and review cost "
+            "more of the capped model than the change itself and the hand-off is serial "
+            "(recorded small tasks: +34%..+66% capped-model spend, 2x time)",
+        )
+    if regime == "fable_ahead":
+        if not main_is_capped and reviewer is not None and has_max:
+            return "max", (
+                "the capped half is ahead of pace and this main loop is not the capped model: "
+                "Max spends the capped model only at two evidence-only checkpoints (recorded ~$0.4 per task)",
+            )
+        if main_is_capped:
+            reasons = [
+                "the capped half is ahead of pace; Lite spends about as much of it as inline "
+                "(recorded $1.26 vs $1.31), so it fills the other half but does not stretch this one",
+                "for the next session start Opus 5 as the main loop with the capped model as Max "
+                "reviewer; that drops its spend to about $0.4 per task",
+            ]
+            return ("lite" if worker is not None else "inline"), tuple(reasons)
+    if worker is not None:
+        reasons = [
+            "execution-heavy and specifiable: the main loop plans, reviews, and integrates while the "
+            "worker implements; the capped model's spend stays roughly flat with task size while "
+            "inline spend grows with every line",
+        ]
+        if task.packets >= 2:
+            reasons.append(
+                f"{task.packets} independent packets run as parallel workers under one plan and one review"
+            )
+        if main_is_capped and worker is not None and not is_capped_model(worker.model_id):
+            reasons.append(
+                "capped-model share of spend lands near 50%, so both halves of the week deplete together"
+            )
+        if regime == "fable_behind":
+            reasons.append(
+                "the capped half is behind pace: there is room to raise the main loop's effort or "
+                "keep judgment work inline this week"
+            )
+        return "lite", tuple(reasons)
+    if reviewer is not None and not main_is_capped and has_max:
+        return "max", ("no worker route offered; Max lets a distinct reviewer hold authority",)
+    return "inline", ("no worker or reviewer route was offered",)
 
 
 def _objective_value(plan: PlanEstimate, objective: str) -> float:
@@ -514,11 +712,16 @@ def _recommend(
 
 
 __all__ = (
+    "Budget",
     "CALIBRATION",
     "DEFAULT_CACHE_TTL",
+    "DEFAULT_OBJECTIVE",
     "DELEGATION_FLOOR_LINES",
     "DELEGATION_MARGIN",
+    "LITE_FLOOR_LINES",
+    "REGIMES",
     "SUBAGENT_CACHE_TTL",
+    "TARGET_CAPPED_SHARE",
     "WORKER_VOLUME_FACTOR",
     "DispatchEstimate",
     "JUDGMENT_LEVELS",
@@ -532,4 +735,5 @@ __all__ = (
     "TaskShape",
     "Usage",
     "estimate_dispatch",
+    "is_capped_model",
 )
