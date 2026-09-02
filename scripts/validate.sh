@@ -26,7 +26,24 @@ for json_file in \
 done
 
 bash -n scripts/package-skill.sh scripts/validate.sh scripts/setup-model-providers.sh
-python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_validate.py" .
+# The Codex skill validator predates the Agent Skills `compatibility` frontmatter
+# field, which Claude Code reads and this skill keeps. Tolerate exactly that one
+# complaint; any other finding, or any additional unexpected key, still fails.
+codex_validator="${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_validate.py"
+if [ -f "$codex_validator" ]; then
+  if ! codex_output="$(python3 "$codex_validator" . 2>&1)"; then
+    if [ "$(printf '%s\n' "$codex_output" | grep -c .)" -eq 1 ] \
+      && printf '%s\n' "$codex_output" \
+        | grep -q 'Unexpected key(s) in SKILL.md frontmatter: compatibility\. Allowed properties'; then
+      echo "Model Boss: Codex validator does not know the 'compatibility' key; tolerated" >&2
+    else
+      printf '%s\n' "$codex_output" >&2
+      exit 1
+    fi
+  fi
+else
+  echo "Model Boss: Codex quick_validate.py not installed; skipping that check" >&2
+fi
 python3 -m unittest tests.test_skill_content tests.test_docs -q
 
 validation_tmp="$(mktemp -d)"
