@@ -81,13 +81,23 @@ loop wins. A same-model worker stays eligible (it isolates context) but is chose
 when nothing distinct is available, and the fact is recorded either way. Reviewer
 eligibility is unchanged: the reviewer must be a distinct canonical fingerprint.
 
-## Quota weights and the dispatch estimate
+## Quota pace and the dispatch estimate
 
-Each route carries `quota_weight` (default `1.0`). `estimate` multiplies each role's
-price-proxy cost by its weight so that a scarcer window counts for more; the default is
-the plain price proxy because per-model subscription metering is not published. The
-`main-model` objective instead minimises the spend billed to the main loop's own model.
-The coefficients are calibrated on the recorded runs in `BENCHMARKS.md` and
+A Claude Max subscription meters one shared weekly total and caps the strongest model's
+share of it (Fable may use at most half). The default `pace` objective therefore does
+not minimise spend: it picks the strongest topology that keeps the total and the capped
+half on pace, given the three percentages the user reads off the usage view
+(`--total-used`, `--fable-used`, `--week-elapsed`). Regimes are `on_pace`,
+`fable_behind`, `fable_ahead`, `fable_exhausted`, and `total_exhausted`. Lite with an
+Opus worker measured a 48% capped-model share on the recorded task, so it is the steady
+state that depletes both halves together; judgment work inline pushes the share up, and
+Max with an Opus main loop pulls it back down. The policy steps aside for judgment-dense
+work, single-packet changes under roughly 200 lines, and an exhausted half.
+
+Each route also carries `quota_weight` (default `1.0`) for the cost objectives:
+`weighted` minimises the quota-weighted price proxy across every role and `main-model`
+the spend billed to the main loop's own model, each requiring a 10% saving before a
+hand-off. The coefficients are calibrated on the recorded runs in `BENCHMARKS.md` and
 `benchmarks/fable-effort-dispatch-rerun.md`; the latter measured Fable 5.1 at low and
 medium effort inline and with Opus 5 and Sonnet 5 workers, and is why `estimate` charges
 delegated volume and prices subagent cache writes at the five-minute rate.

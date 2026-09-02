@@ -85,28 +85,42 @@ still needs diagnosis, or a design/security decision that cannot yet be expresse
 acceptance criteria. Stepping aside leaves the inherited main loop in charge; it does
 not invent a different route.
 
-Price the hand-off before choosing. Run
+Decide the topology with the estimate before choosing. Run
 
 ```bash
 python3 <model-boss-skill-root>/scripts/model-boss.py estimate \
   --profile <profile> --main-model <exact-main-model-id> [--main-effort <level>] \
   --worker <route> [--reviewer <route>] --lines <changed-lines> --files <files> \
-  --judgment low|medium|high --spec clear|partial|unclear [--mechanical] \
-  [--objective weighted|main-model]
+  --judgment low|medium|high --spec clear|partial|unclear [--packets <n>] \
+  [--total-used <pct> --fable-used <pct> --week-elapsed <pct>] \
+  [--objective pace|weighted|main-model]
 ```
 
-It compares inline, Lite, and Max on a quota-weighted price proxy and on the main-loop
-model's own spend, prices the worker's cold start (caches are model-scoped and a
-subagent never reads the main loop's cache) and the expected rework, and applies the
-delegation floor plus a 10% margin. Follow its recommendation unless the user chose a
-topology explicitly; `needs_context` means the acceptance criteria must be clarified
-first. Its coefficients come from two recorded runs and are a tunable proxy, not a bill.
+The default objective, `pace`, is for a subscription whose weekly quota is one shared
+total with a cap on the strongest model's share. It does not minimise spend; it picks
+the strongest topology that keeps both the total and the capped half on pace. When the
+three percentages are unknown, ask the user to read them off the host's usage view. The
+capped model's share of spend should sit near 50% so both halves deplete together. The
+policy it encodes:
 
-Measured on the recorded large task: a Fable 5.1 main loop at `low` or `medium` effort
-doing the work inline beat every delegated topology on total spend and time; an Opus 5
-worker under a Fable main loop saved almost no Fable spend; a Sonnet 5 worker cut Fable
-spend by about a third at a higher total. In Lite the main loop pays mostly for reading
-the worker's report and diff, so keep worker reports short and diffs tight.
+- Execution-heavy, specifiable work (large refactors, greenfield subsystems,
+  multi-feature sprints; roughly 200 changed lines or two or more independent packets)
+  runs as Lite: the main loop plans, reviews, and integrates; the strongest available
+  worker implements at `xhigh`; independent packets run as parallel workers.
+- Judgment-dense work (root-cause debugging, design, security) stays inline: the
+  reasoning is the workload, and a hand-off adds latency and reading cost.
+- Small single-packet changes stay inline: the packet and review cost more of the
+  capped model than the change, and the hand-off is serial.
+- When the capped half runs ahead of pace, Lite does not stretch it (it spends about
+  as much of the capped model as inline): advise starting the next session with Opus
+  as the main loop and the capped model as Max reviewer. When it is exhausted, return
+  `switch-main-loop`.
+
+`weighted` and `main-model` are the cost objectives for pay-per-token use; they
+minimise the price proxy or the main loop's own spend and require a 10% saving before
+a hand-off. The table prints under every objective; its coefficients come from two
+recorded runs and are a tunable proxy, not a bill. `needs_context` means the
+acceptance criteria must be clarified first.
 
 Classify eligible work as implementation, mechanical editing, or read-only
 reconnaissance. Split independent, non-overlapping packets. If the codebase facts are
@@ -267,6 +281,15 @@ Everything in the packet is full-price input for the worker: it starts with an e
 cache, so send conclusions and file references, not transcripts. Keep one model and one
 effort for the whole session; changing either restarts the main loop's cache. A worker
 that will take revision rounds is worth a one-hour subagent cache TTL on the host.
+
+The main loop pays for what it reads more than for what it writes: in the recorded Lite
+runs 60% to 67% of its spend was cache writes from worker reports and diffs. Require the
+RETURN section as a structured report of at most thirty lines (files changed, the
+approach in three sentences, exact gate results, open questions). Review by reading the
+full diff of interfaces and core logic, `git diff --stat` plus gate evidence for the
+rest, and a sample of the tests. Do not cap how much the worker delivers; cap what the
+main loop reads. Independent packets go to parallel workers in one turn, each fenced to
+its own allowed paths, and come back through one review.
 
 ## 6. Gate and canonical evidence requirements
 

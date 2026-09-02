@@ -36,9 +36,20 @@ Tiny edits, pure discussion, and unresolved root-cause debugging do not justify 
 
 Use Model Boss when a task is bounded, constructive, and large enough to repay orchestration overhead: a material multi-file implementation, a migration, repeated mechanical changes, or independent packets with testable acceptance criteria.
 
-Let the main loop work normally for a tiny edit, pure conversation or analysis, unresolved root-cause debugging, or a design/security decision that cannot yet be expressed as acceptance criteria. The delegation floor is priced rather than guessed: the `estimate` command compares doing the task inline against Lite and Max on a quota-weighted price proxy, charges the hand-off (packet, cold worker start, review, expected rework), and requires a 10% saving before recommending a dispatch. A strong main loop at a lower effort often beats delegating, and the estimate says so when it does.
+Let the main loop work normally for a tiny edit, pure conversation or analysis, unresolved root-cause debugging, or a design/security decision that cannot yet be expressed as acceptance criteria.
 
-The published measurements are a historical Claude/Fable/Opus snapshot, not a promise for every model profile. See the [scoped benchmark report](BENCHMARKS.md) before choosing Model Boss for cost or quota reasons. The 2026-09 Fable 5.1 rerun linked from [BENCHMARKS.md](BENCHMARKS.md) measured the same large task at low and medium effort: Fable 5.1 at low effort doing the work inline was the cheapest and fastest Fable path, an Opus 5 worker under a Fable main loop saved almost no Fable spend while doubling the total, and a Sonnet 5 worker cut Fable spend by roughly a third at a higher total. Reach for a worker when the Fable window is your binding constraint, not to save money.
+For a Claude Max subscription the weekly quota is one shared total with a cap on Fable's share, so Model Boss's default policy is quality within pace, not lowest cost. Execution-heavy, specifiable work such as large refactors, greenfield subsystems, and multi-feature sprints runs as Lite: a Fable main loop plans, reviews, and integrates while Opus 5 workers at `xhigh` implement, independent packets in parallel. That topology's Fable share of spend measured 48%, so it depletes both halves of the week together. Four cases stay out of it:
+
+| Case | Why | Do instead |
+|---|---|---|
+| Judgment-dense work (root-cause debugging, design, security) | The reasoning is the workload; a hand-off adds latency and reading cost for the same result | Fable inline, effort `high` |
+| Small single-packet changes, under roughly 200 lines | Packet plus review costs more Fable than the change; the hand-off is serial | Fable inline |
+| One interactive stream where latency matters | A single worker is a serial hop (2.7x wall time measured); parallelism needs two or more packets | Split into packets or stay inline |
+| Fable half running ahead of pace | Lite spends about as much Fable as inline; it fills the other half but does not stretch this one | A Max session: Opus 5 main loop, Fable as reviewer, about $0.4 Fable per task |
+
+The `estimate` command encodes exactly this. Give it the task shape (`--lines`, `--files`, `--judgment`, `--packets`) and the three percentages from `/usage` (`--total-used`, `--fable-used`, `--week-elapsed`) and it prints the regime, the cost table, and the recommendation, including a `switch-main-loop` verdict when the Fable half is exhausted. Steer the week by one number: Fable's share of total spend, target 50%; judgment work inline pushes it up, Max or Opus sessions pull it down.
+
+The published measurements are a historical Claude/Fable/Opus snapshot, not a promise for every model profile. See the [scoped benchmark report](BENCHMARKS.md) before relying on any of the numbers. The 2026-09 Fable 5.1 rerun linked from [BENCHMARKS.md](BENCHMARKS.md) measured the same large task at low and medium effort: Fable 5.1 inline at low effort was the cheapest and fastest Fable path, a Fable main loop with an Opus 5 worker spent Fable at about the inline rate while filling the other half of the quota, and a Sonnet 5 worker cut Fable spend by roughly a third. Delegation is how you use the whole week; Max is how you stretch Fable; lower effort is how you make Fable cheap.
 
 ## Lite and Max at a glance
 
@@ -123,14 +134,14 @@ The default Anthropic profile pins every model the Claude Code picker exposes to
 | `sonnet-4.6` | `claude-sonnet-4-6` | low, medium, high, max | 0.30 | 1024 |
 | `haiku-4.5` | `claude-haiku-4-5` | none | 0.10 | 4096 |
 
-Defaults: reviewers `fable-5.1` then `opus-5`; workers `opus-5-worker` then `sonnet-5`; scouts and mechanics `haiku-4.5`. Every route carries an `effort` (validated against the catalog, so `xhigh` on Opus 4.6 is a configuration error), a `quota_weight` (default `1.0`; raise it for the window you find scarcest) and optional spoken `aliases`. Effort is a spend control, not identity: the same model at two effort levels still collides for authority separation. Two helper commands back this up, neither of which touches a model:
+Defaults: reviewers `fable-5.1` then `opus-5` at `high`; workers `opus-5-worker` then `sonnet-5` at `xhigh`; scouts and mechanics `haiku-4.5`. Every route carries an `effort` (validated against the catalog, so `xhigh` on Opus 4.6 is a configuration error), a `quota_weight` (default `1.0`; raise it for the window you find scarcest) and optional spoken `aliases`. Effort is a spend control, not identity: the same model at two effort levels still collides for authority separation. Two helper commands back this up, neither of which touches a model:
 
 ```bash
 python3 <model-boss-skill-root>/scripts/model-boss.py match-models --profile anthropic --text "让 opus 4.6 去开发"
-python3 <model-boss-skill-root>/scripts/model-boss.py estimate --profile anthropic --main-model claude-fable-5-1 --main-effort high --worker opus-5-worker --lines 800 --files 8 --judgment low
+python3 <model-boss-skill-root>/scripts/model-boss.py estimate --profile anthropic --main-model claude-fable-5-1 --main-effort medium --worker opus-5-worker --lines 800 --files 8 --judgment low --packets 2 --total-used 40 --fable-used 45 --week-elapsed 40
 ```
 
-`match-models` maps the model names in a request to routes with longest-match-wins and reports an unknown version (`fable 6`) as `needs_context` instead of guessing. `estimate` prices inline, Lite, and Max for the task shape, charging the worker's cold start (caches are model-scoped and subagents never read the main loop's cache) and the expected rework; its coefficients are calibrated on the single run in [BENCHMARKS.md](BENCHMARKS.md) and are a proxy, not a bill.
+`match-models` maps the model names in a request to routes with longest-match-wins and reports an unknown version (`fable 6`) as `needs_context` instead of guessing. `estimate` prices inline, Lite, and Max for the task shape, charging the worker's cold start (caches are model-scoped and subagents never read the main loop's cache), delegated volume, and expected rework, then applies the `pace` policy described above, or the cost objectives `weighted` and `main-model` on request; its coefficients are calibrated on the recorded runs and are a proxy, not a bill.
 
 Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. The published examples and schema are [`config/model-boss.example.json`](config/model-boss.example.json) and [`config/model-boss.schema.json`](config/model-boss.schema.json); project discovery uses `.model-boss.json`. On POSIX, user discovery uses `$XDG_CONFIG_HOME/model-boss/config.json` only when `XDG_CONFIG_HOME` is absolute; otherwise it uses `$HOME/.config/model-boss/config.json`. On PowerShell, an absolute `$env:XDG_CONFIG_HOME` wins; otherwise the runtime reads absolute `$env:HOME` and falls back to absolute `$env:USERPROFILE` only when HOME is absent. The displayed fallback `$HOME\.config\model-boss\config.json` uses PowerShell's `$HOME` convenience variable. Missing or relative selected roots fail closed. See [routing and capability resolution](references/routing.md) for the complete rules.
 
@@ -429,7 +440,7 @@ The Fable 5.1 effort and dispatch rerun, linked from [BENCHMARKS.md](BENCHMARKS.
 
 ## When Model Boss steps aside
 
-Model Boss steps aside before dispatch for tiny edits, pure conversation, unresolved debugging, judgment-dense work without testable acceptance criteria, or tasks below the delegation floor, and whenever the `estimate` shows that a hand-off would not clear its 10% margin. It also stops rather than improvising when identity, reviewer, provider, sandbox, gate, scope, approval, or destination invariants fail.
+Model Boss steps aside before dispatch for tiny edits, pure conversation, unresolved debugging, judgment-dense work without testable acceptance criteria, and single-packet changes below the delegation floor; under the cost objectives also whenever the `estimate` shows that a hand-off would not clear its 10% margin. It also stops rather than improvising when identity, reviewer, provider, sandbox, gate, scope, approval, or destination invariants fail.
 
 Stepping aside leaves the inherited main loop in charge. It does not switch models, invent a route, weaken Max, or treat orchestration already spent as a reason to continue unsafely.
 

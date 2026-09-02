@@ -41,12 +41,25 @@ Lite 由继承的主循环持有两个权威检查点并派遣可选 Worker；Ma
 小改动、纯讨论、尚未定位根因的调试，以及无法先写成规格的设计或安全决策，不适合
 编排。Model Boss 会让开，由已经选定的主循环直接处理。
 
-派工门槛是算出来的，不是拍的：`estimate` 命令按额度加权的价格代理比较 inline、Lite、Max，
-把交接成本（任务包、Worker 冷启动、评审、预期返工）算进去，省不到 10% 就不建议派工。
-高级主循环开低 effort 直接干常常比派工更划算，估算会把这一点如实说出来。2026-09 的
-Fable 5.1 复跑（从 [BENCHMARKS.zh-CN.md](BENCHMARKS.zh-CN.md) 链接过去）在同一大型任务上实测：Fable 5.1 开 low
-自己干是最便宜也最快的 Fable 路径；Fable 主循环配 Opus 5 worker 几乎不省 Fable 却让总额翻倍；
-配 Sonnet 5 worker 省约三分之一 Fable 但总额更高。派 worker 是为了保 Fable 窗口，不是为了省钱。
+Claude Max 订阅的每周额度是一个共用总池，外加 Fable 最多用一半的上限，所以 Model Boss 的默认策略是
+「节奏内选最强」，不是省钱。大量重构、新建子系统、多功能并行开发这类有实质执行体量、验收标准写得清的
+任务走 Lite：Fable 主循环负责计划、评审、集成，Opus 5 worker 开 `xhigh` 负责实现，独立的包并行派。
+这个拓扑实测 Fable 花费占总花费 48%，两个半区会同时见底。四种情况不走它：
+
+| 情况 | 为什么 | 该用什么 |
+|---|---|---|
+| 判断密集：定位根因、设计取舍、安全决策 | 推理本身就是工作量，交接只增加等待和读 diff 的成本，结果相同 | Fable 自己干，effort 开 `high` |
+| 单个包、改动小于约 200 行 | 任务包加评审花的 Fable 超过直接改；交接是串行的 | Fable 自己干 |
+| 只有一条流、你在等结果 | 单 worker 是串行的一跳（实测慢 2.7 倍），并行优势要两个以上的包才有 | 能拆就拆成包，拆不了就自己干 |
+| Fable 半区快于进度 | Lite 每任务花的 Fable 和自己干差不多，它填另一半，不撑这一半 | 另开 Max 会话：Opus 5 主循环，Fable 只审两个检查点，每任务约 $0.4 Fable |
+
+`estimate` 命令编码的就是这套规则。给它任务形状（`--lines`、`--files`、`--judgment`、`--packets`）和 /usage 里的三个百分比
+（`--total-used`、`--fable-used`、`--week-elapsed`），它会打印所处的节奏状态、成本表和建议，Fable 半区见底时给出 `switch-main-loop`。
+一周只盯一个数：Fable 占总花费的比例，目标 50%；判断类工作自己干会把它推高，Max 或 Opus 会话把它拉回。
+
+2026-09 的 Fable 5.1 复跑（从 [BENCHMARKS.zh-CN.md](BENCHMARKS.zh-CN.md) 链接过去）在同一大型任务上实测：Fable 5.1 开 low
+自己干是最便宜也最快的 Fable 路径；Fable 主循环配 Opus 5 worker 的 Fable 花费与自己干相当，同时把另一半额度用起来；
+配 Sonnet 5 worker 省约三分之一 Fable。派工是把整周额度用满的办法，Max 是撑 Fable 的办法，低 effort 是让 Fable 变便宜的办法。
 
 ## Lite 与 Max 一览
 
@@ -121,14 +134,14 @@ Worker 最多自修三次。最终 Reviewer 最多提出两轮 `revise`；第三
 | `sonnet-4.6` | `claude-sonnet-4-6` | low、medium、high、max | 0.30 | 1024 |
 | `haiku-4.5` | `claude-haiku-4-5` | 不支持 | 0.10 | 4096 |
 
-默认偏好：Reviewer 先 `fable-5.1` 后 `opus-5`；Worker 先 `opus-5-worker` 后 `sonnet-5`；Scout 与 Mechanic 用 `haiku-4.5`。每条路由带 `effort`（按目录校验，Opus 4.6 上写 `xhigh` 是配置错误）、`quota_weight`（默认 `1.0`，哪个窗口最紧就把它调大）和可选的口语 `aliases`。effort 是花费控制，不是身份：同一模型两个 effort 在权威分离上仍视为同一个模型。两个辅助命令都不调用任何模型：
+默认偏好：Reviewer 先 `fable-5.1` 后 `opus-5`，effort `high`；Worker 先 `opus-5-worker` 后 `sonnet-5`，effort `xhigh`；Scout 与 Mechanic 用 `haiku-4.5`。每条路由带 `effort`（按目录校验，Opus 4.6 上写 `xhigh` 是配置错误）、`quota_weight`（默认 `1.0`，哪个窗口最紧就把它调大）和可选的口语 `aliases`。effort 是花费控制，不是身份：同一模型两个 effort 在权威分离上仍视为同一个模型。两个辅助命令都不调用任何模型：
 
 ```bash
 python3 <model-boss-skill-root>/scripts/model-boss.py match-models --profile anthropic --text "让 opus 4.6 去开发"
-python3 <model-boss-skill-root>/scripts/model-boss.py estimate --profile anthropic --main-model claude-fable-5-1 --main-effort high --worker opus-5-worker --lines 800 --files 8 --judgment low
+python3 <model-boss-skill-root>/scripts/model-boss.py estimate --profile anthropic --main-model claude-fable-5-1 --main-effort medium --worker opus-5-worker --lines 800 --files 8 --judgment low --packets 2 --total-used 40 --fable-used 45 --week-elapsed 40
 ```
 
-`match-models` 按最长匹配把请求里的模型名映射到路由，目录里没有的版本（`fable 6`）返回 `needs_context` 而不是猜一个相近版本。`estimate` 按任务形状给 inline、Lite、Max 三种方案算账，计入 Worker 冷启动（缓存按模型隔离，子代理读不到主循环的缓存）和预期返工；系数按 [BENCHMARKS.zh-CN.md](BENCHMARKS.zh-CN.md) 里那一次记录校准，是代理值，不是账单。
+`match-models` 按最长匹配把请求里的模型名映射到路由，目录里没有的版本（`fable 6`）返回 `needs_context` 而不是猜一个相近版本。`estimate` 按任务形状给 inline、Lite、Max 三种方案算账，计入 Worker 冷启动（缓存按模型隔离，子代理读不到主循环的缓存）、派工后的产出体积和预期返工，再套用上面的 `pace` 策略，或按需改用成本目标 `weighted`、`main-model`；系数按记录在案的两次运行校准，是代理值，不是账单。
 
 你可以增加未来模型或自定义 CLI 路由，只要它们声明能力和角色，并通过相同的身份、
 权限、沙箱与证据检查。发布的示例与 schema 是 [`config/model-boss.example.json`](config/model-boss.example.json) 和 [`config/model-boss.schema.json`](config/model-boss.schema.json)；项目自动发现 `.model-boss.json`。POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/config.json`，否则使用 `$HOME/.config/model-boss/config.json`。PowerShell 中，绝对的 `$env:XDG_CONFIG_HOME` 优先；否则运行时先读取绝对的 `$env:HOME`，只在 HOME 缺失时回退到绝对的 `$env:USERPROFILE`。文档显示的 `$HOME\.config\model-boss\config.json` 使用 PowerShell 的 `$HOME` 便捷变量。被选中的根路径缺失或为相对路径时会安全失败。Profile 文件位于 [references/profiles](references/profiles)。
@@ -427,9 +440,9 @@ Fable 5.1 effort 与派工复跑（从 [BENCHMARKS.zh-CN.md](BENCHMARKS.zh-CN.md
 
 ## Model Boss 何时让开
 
-以下情况由主循环直接处理，不开启编排：小于任务包/评审开销的改动；纯分析；尚未
+以下情况由主循环直接处理，不开启编排：单个包且小于约 200 行的改动；纯分析；尚未
 定位根因的具体错误；安全或架构核心仍需要探索；用户只问模型价格/选择；可执行
-规格比代码本身更长；或者 `estimate` 算出来交接省不到 10%。
+规格比代码本身更长；用成本目标时还包括 `estimate` 算出来交接省不到 10%。
 
 ## 从 Token Saver 迁移
 

@@ -19,6 +19,7 @@ Model Boss 是 Claude Code 与 Codex 共用的跨模型编程编排工作流。�
 - 已核实的缓存事实（Claude Code 与 API 文档）：缓存按模型、按 effort 隔离，切换即整段重算；子代理不读父会话缓存，订阅下主会话 1 小时 TTL、子代理 5 分钟（`subagentPromptCacheTtl`）；Fable 5.1 缓存读价 $0.25/MTok（其他模型 0.1 倍基价）；跨模型带得走的是思考块（只在切到 Fable 5.1 的方向），不是缓存。
 - 未核实：按模型的订阅额度倍率没有公开文档，所以做成 `quota_weight` 可配置，默认 1.0。
 - 真实 benchmark 复跑已完成，结果在 [`benchmarks/fable-effort-dispatch-rerun.md`](../benchmarks/fable-effort-dispatch-rerun.md)（原始数据 `.json` 同名）。harness 在 `benchmarks/harness/`（`run_cells.py`，6 个格子，Fable 只跑 low/medium），以独立 `claude -p` 子进程运行，要求终端里 `claude auth login` 过；从桌面 App 宿主会话派生的子进程借不到宿主鉴权。Fable 5.1 要求 CLI 2.1.251+，harness 有版本预检；2026-09-02 为此把 nvm 里的 CLI 从 2.1.246 升到 2.1.258。
+- 策略层（用户确认额度语义后定稿）：Claude Max 是一个共用总池加 Fable 一半上限；用户是质量优先而不是成本敏感。`estimate` 默认目标改为 `pace`（节奏内选最强）：执行体量大、规格清楚的任务走 Fable 主循环 + Opus worker（xhigh，独立包并行），四种例外是判断密集、单包小于约 200 行、单流交互、Fable 半区超前节奏（后者建议下个会话用 Opus 主循环 + Fable reviewer 的 Max）。节奏输入是 /usage 的三个百分比，目标 Fable 占总花费 50%。成本目标 `weighted`、`main-model` 保留给按量付费用户。大于 1,000 行的 Fable 节省数字是模型外推，未实测。
 - 复跑结论：Fable 5.1 low 单干最便宜最快（$1.31，比 Fable 5 high 基线省 57%）；Opus 5 worker 几乎不省 Fable 且总额翻倍；Sonnet 5 worker 省约三分之一 Fable 但总额更高；Lite 里 Fable 主循环六到七成花费是读 worker 报告和 diff 的缓存写入。`dispatch.py` 据此重校准，并加了 worker 产出体积因子和子代理 5 分钟 TTL 计价。
 
 ## 评测与安全维护

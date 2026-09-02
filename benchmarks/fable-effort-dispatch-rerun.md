@@ -63,6 +63,27 @@ Workers (subagents, five-minute cache TTL): Sonnet 5 wrote 36,867 output tokens 
    tests. A clear constructive spec is a ceiling for this kind of comparison; the recorded
    blind bug-hunt remains the only capability probe.
 
+## Reading the same numbers as a quality-first subscription user
+
+The findings above rank by spend. A Claude Max subscriber whose weekly quota is one
+shared total with a cap on Fable's share, and who wants the best result rather than the
+lowest bill, should read the same cells differently:
+
+- Fable inline burns only the Fable half and leaves the other half idle. Lite with an
+  Opus worker split its spend 48% Fable / 52% Opus, almost exactly the plan's shape, so
+  it is the topology that uses the whole week while keeping Fable in charge of the plan
+  and the review. Its Fable spend ($1.26) was about the inline-low rate ($1.31): it fills
+  the other half, it does not stretch this one. Max is what stretches Fable.
+- The Opus worker delivered the most (118 tests, 1,859 lines); "over-delivery" is a
+  cost-side label. Nothing in these cells says Opus execution under Fable review is
+  worse, and the single-worker layout hid the speed case for it: independent packets
+  run as parallel workers, which Fable inline cannot do.
+- Fable's spend in Lite is roughly flat in task size while inline spend grows with
+  every line, so the case for a Fable main loop with Opus workers strengthens with task
+  size. Extrapolating with the recalibrated model (not measured): at about 1,500 changed
+  lines Lite spends roughly 45% less Fable than inline, at 3,000 about 50%, and below
+  about 200 lines it spends more. Large refactors and multi-packet sprints were not run.
+
 ## Method notes and limits
 
 - Lite here is the skill's host-native flow: the Fable main loop printed the verdict and
@@ -87,3 +108,9 @@ Workers (subagents, five-minute cache TTL): Sonnet 5 wrote 36,867 output tokens 
 - **配 Sonnet 5 worker 是拿总额换 Fable 窗口**：Fable 省 22% 到 37%，总额多 7% 到 32%，时间 2.5 倍。只有 Fable 窗口是硬约束时才值得。
 - **Lite 里 Fable 的钱花在「读」上**：自己的输出降了六成，但读 worker 报告和 diff 的缓存写入占了六到七成花费（1 小时 TTL 下 $20/MTok）。让 worker 报告短、diff 小，比让 Fable 少说话更省。
 - 质量在这类规格清晰的建设性任务上分不出差别，六格全绿。
+
+如果你是质量优先、额度是「共用总池加 Fable 一半上限」的订阅用户，同一组数字要反过来读：Fable 自己干只烧
+Fable 半区，另一半闲着；Fable 主循环配 Opus worker 的花费比例是 48 比 52，正好是套餐的形状，它是把整周
+额度用满、又让 Fable 掌握计划和评审的拓扑，只是它不撑 Fable（每任务 Fable 花费与自己干相当），撑 Fable 的
+是 Max。Opus worker 交付最厚，单 worker 的格子也没体现并行包的速度优势。按重校准后的模型外推（未实测）：
+约 1,500 行时 Lite 比自己干省约 45% Fable，3,000 行约 50%，200 行以下反而更贵。大量重构和多包并行没有跑过。

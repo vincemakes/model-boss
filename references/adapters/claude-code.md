@@ -20,7 +20,8 @@ to the Agent tool. Aliases resolve host-side: `opus` means the newest Opus the h
 exposes, and `ANTHROPIC_DEFAULT_OPUS_MODEL` (likewise `_SONNET_`, `_HAIKU_`, `_FABLE_`)
 pins what an alias means for the whole host. The main loop's own effort is set with
 `--effort`, `/effort`, or `CLAUDE_CODE_EFFORT_LEVEL`; Model Boss reports it in the
-verdict and never changes it.
+verdict and never changes it. Independent packets are dispatched as parallel Agent
+calls in one turn, each worker fenced to its own allowed paths, and reviewed together.
 
 ## Cache facts that shape the hand-off
 
