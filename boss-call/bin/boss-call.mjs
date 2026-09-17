@@ -2,7 +2,7 @@
 /**
  * boss-call — one Boss, several members, one line each.
  *
- *   boss-call setup                      install the kiso extension + the skill into every harness present
+ *   boss-call setup                      link the skill (and extension) into every harness on this machine
  *   boss-call host <room>                become the boss of a room
  *   boss-call join <room> --as <name>    join a room as a member; the current directory is your repo
  *   boss-call who                        which side you are on
@@ -54,7 +54,18 @@ function die(msg) {
 	process.exit(2);
 }
 
-const HARNESSES = [".kiso", ".claude", ".codex"];
+/**
+ * Where harnesses look for skills. `~/.agents/skills` is the shared convention
+ * (pi, opencode and others read it); Claude Code and Codex have their own
+ * directories. The extension is only for a harness that loads one from
+ * ~/.kiso/extensions; it is linked only when that directory exists.
+ */
+const SKILL_DIRS = [
+	{ at: [".agents", "skills"], always: true, note: "pi, opencode, any agentskills.io harness" },
+	{ at: [".claude", "skills"], note: "Claude Code" },
+	{ at: [".codex", "skills"], note: "Codex" },
+	{ at: [".kiso", "skills"], note: "kiso" },
+];
 
 function link(target, at) {
 	mkdirSync(dirname(at), { recursive: true });
@@ -66,16 +77,24 @@ function link(target, at) {
 	return "linked";
 }
 
+function onPath(name) {
+	return (process.env.PATH ?? "").split(":").some((d) => d && existsSync(join(d, name)));
+}
+
 function cmdSetup() {
-	const present = HARNESSES.filter((h) => existsSync(join(homedir(), h)));
-	if (!present.length) die("no ~/.kiso, ~/.claude or ~/.codex found — install one of those first, then run setup again");
-	for (const h of present) {
-		const r = link(PKG, join(homedir(), h, "skills", "boss-call"));
-		console.log(`  ${r.padEnd(6)} ~/${h}/skills/boss-call -> ${PKG}`);
-		if (h === ".kiso") {
-			const r2 = link(join(PKG, "kiso-extension.mjs"), join(homedir(), h, "extensions", "boss-call.mjs"));
-			console.log(`  ${r2.padEnd(6)} ~/.kiso/extensions/boss-call.mjs -> ${join(PKG, "kiso-extension.mjs")}`);
-		}
+	const home = homedir();
+	for (const d of SKILL_DIRS) {
+		if (!d.always && !existsSync(join(home, d.at[0]))) continue;
+		const r = link(PKG, join(home, ...d.at, "boss-call"));
+		console.log(`  ${r.padEnd(6)} ~/${d.at.join("/")}/boss-call  (${d.note})`);
+	}
+	if (existsSync(join(home, ".kiso"))) {
+		const r = link(join(PKG, "kiso-extension.mjs"), join(home, ".kiso", "extensions", "boss-call.mjs"));
+		console.log(`  ${r.padEnd(6)} ~/.kiso/extensions/boss-call.mjs`);
+	}
+	if (!onPath("boss-call")) {
+		const r = link(join(PKG, "bin", "boss-call.mjs"), join(home, ".local", "bin", "boss-call"));
+		console.log(`  ${r.padEnd(6)} ~/.local/bin/boss-call  (add ~/.local/bin to PATH if it is not)`);
 	}
 	console.log("\nnext: the boss runs `boss-call host <room>`; each member runs `boss-call join <room> --as <name>` inside its repo.");
 }

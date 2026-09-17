@@ -19,9 +19,9 @@ Room and name come from the current directory once joined. Override with
 
 ## If you are a member
 
-Under kiso the extension is already loaded: call `boss_read` at the start of
-every turn, do the work, and before you stop call `boss_read` once more, then
-`boss_post` with kind `status`. Under any other harness use the CLI:
+If your harness gave you `boss_read` / `boss_post` tools, use them: `boss_read`
+at the start of every turn, do the work, `boss_read` once more before you stop,
+then `boss_post` with kind `status`. Otherwise use the CLI, same rhythm:
 
 ```bash
 boss-call read --ack                       # unread mail from the boss
@@ -45,9 +45,9 @@ boss-call tail -n 30                        # the whole room, latest last
 boss-call peek-session latest --match "<first words of that session's prompt>"
 ```
 
-`peek-session` reads a kiso session's log and reports its state (ended, waiting
-on a person, uncertain executions) and last text. Prefer it to asking a member
-to report: it costs the member nothing and never flatters.
+`peek-session` reads a member session's durable log (kiso format) and reports
+its state and last text. Prefer it to asking a member to report when it is
+available: it costs the member nothing and never flatters.
 
 One matter per message. Facts and order, not encouragement. Answer every ask.
 
