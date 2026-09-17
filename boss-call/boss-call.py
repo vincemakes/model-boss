@@ -32,8 +32,36 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 HOME = Path(os.environ.get("BOSS_CALL_HOME", Path.home() / ".model-boss" / "boss-call"))
-DEFAULT_ROOM = os.environ.get("BOSS_CALL_ROOM", "default")
 KINDS = ("msg", "ask", "reply", "status")
+
+
+def resolve_room(explicit: str | None, cwd: str | None = None) -> str:
+    """--room, else $BOSS_CALL_ROOM, else the room whose member (or boss) root
+    contains the cwd, else the only room there is. Refuses to guess between
+    several — nobody should ever post into the wrong room by accident."""
+    if explicit:
+        return explicit
+    env = os.environ.get("BOSS_CALL_ROOM")
+    if env:
+        return env
+    here = Path(cwd or os.getcwd()).resolve()
+    rooms = sorted(p.name for p in HOME.iterdir() if p.is_dir()) if HOME.exists() else []
+    hits: list[tuple[int, str]] = []
+    for room in rooms:
+        try:
+            data = json.loads((HOME / room / "room.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        roots = [m.get("root") for m in data.get("members", {}).values()] + [(data.get("boss") or {}).get("root")]
+        for root in roots:
+            k = _root_contains(root, here)
+            if k >= 0:
+                hits.append((k, room))
+    if hits:
+        return max(hits)[1]
+    if len(rooms) == 1:
+        return rooms[0]
+    sys.exit(f"boss-call: which room? pass --room or set BOSS_CALL_ROOM (rooms: {', '.join(rooms) or 'none — run init'})")
 
 
 # ----------------------------------------------------------------------------
@@ -165,6 +193,8 @@ def cmd_init(a: argparse.Namespace) -> int:
             sys.exit(f"--member wants name=/repo/root, got {spec!r}")
         name, root = spec.split("=", 1)
         data.setdefault("members", {})[name] = {"root": str(Path(root).expanduser().resolve())}
+    if a.launcher:
+        data["launcher"] = a.launcher
     if not data.get("boss"):
         sys.exit("boss-call: a room needs exactly one boss: --boss <name>[=/root]")
     save_room(a.room, data)
@@ -411,7 +441,11 @@ def cmd_serve(a: argparse.Namespace) -> int:
         sys.exit("boss-call serve: only a member serves; the boss reads and posts by hand")
     data = load_room(a.room)
     root = data["members"][me].get("root") or a.cwd or os.getcwd()
-    kiso = shutil.which(a.kiso) or a.kiso
+    # the launcher: --kiso, else the room's registered one (init --launcher),
+    # else plain `kiso`. A wrapper like `kiso-co-bypass` that sources
+    # credentials and picks a profile is the normal case, not the exception.
+    launcher = a.kiso or data.get("launcher") or os.environ.get("BOSS_CALL_KISO") or "kiso"
+    kiso = shutil.which(launcher) or launcher
     session = a.session or f"boss-call-{a.room}-{me}"
     env = dict(os.environ, KISO_MODE=a.mode, BOSS_CALL_ME=me, BOSS_CALL_ROOM=a.room)
     print(f"[serve] {me} in room {a.room!r}, session {session}, cwd {root}, mode {a.mode}, poll {a.poll}s")
@@ -479,12 +513,13 @@ def _session_summary(session: str, lines: int) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="boss-call", description=__doc__.split("\n\n")[0])
-    ap.add_argument("--room", default=DEFAULT_ROOM, help=f"room (default: $BOSS_CALL_ROOM or {DEFAULT_ROOM!r})")
+    ap.add_argument("--room", default=None, help="room (default: $BOSS_CALL_ROOM, else the room your cwd belongs to, else the only room)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("init", help="create/update a room: one boss, N members")
     p.add_argument("--boss", default=None, help="boss name, optionally name=/root")
     p.add_argument("--member", action="append", default=[], help="name=/repo/root (repeatable)")
+    p.add_argument("--launcher", default=None, help="how `serve` starts kiso for this room, e.g. kiso-co-bypass")
     p.set_defaults(fn=cmd_init)
 
     p = sub.add_parser("who", help="who am I, who is the boss, who are the members")
@@ -520,7 +555,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--me", default=None)
     p.add_argument("--cwd", default=None, help="repo root to run in (default: the member's registered root)")
     p.add_argument("--session", default=None, help="kiso session id to continue (default: boss-call-<room>-<me>)")
-    p.add_argument("--kiso", default="kiso", help="kiso binary")
+    p.add_argument("--kiso", default=None, help="launcher (default: the room's --launcher, else $BOSS_CALL_KISO, else kiso)")
     p.add_argument("--mode", default="bypass", help="KISO_MODE for the headless run (a headless run cannot answer an ask)")
     p.add_argument("--poll", type=int, default=30, help="seconds between inbox checks")
     p.add_argument("--once", action="store_true", help="handle at most one batch, then exit")
@@ -534,6 +569,10 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_peek)
 
     a = ap.parse_args(argv)
+    if a.cmd == "init":
+        a.room = a.room or os.environ.get("BOSS_CALL_ROOM") or "default"
+    else:
+        a.room = resolve_room(a.room, getattr(a, "cwd", None))
     return a.fn(a)
 
 
