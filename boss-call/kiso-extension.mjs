@@ -16,7 +16,7 @@
  * implementation, no shelling out.
  */
 import { resolve } from "node:path";
-import { ack, formatMessage, identify, listRooms, loadRoom, post, resolveRoom, unread, waitForMail } from "./src/mailbox.mjs";
+import { ack, formatMessage, identify, listRooms, loadRoom, post, resolveRoom, unread, waitForMailAsync } from "./src/mailbox.mjs";
 
 function locate(cwd) {
 	if (!listRooms().length) return null;
@@ -34,8 +34,8 @@ export default function bossCall() {
 	if (!me) return { name: "boss-call" };
 	const { room, name, role, boss } = me;
 	const line =
-		`Stay on the line: whenever you have nothing left to do, call boss_wait — it blocks until mail arrives (or times out; then call it again). ` +
-		`Do not end your turn to wait; waiting is boss_wait. The person at this terminal can still type; if they do, their instruction wins.`;
+		`Stay on the line: whenever you have nothing left to do, call boss_wait — it blocks until mail arrives (up to 30 minutes; if it comes back empty, call it again). ` +
+		`Never end your turn to wait: an ended turn is a dropped line and nobody can call you back. The person at this terminal can interrupt; then their instruction wins.`;
 	const memberPrompt =
 		`You are "${name}", a member of boss-call room "${room}". Your boss is "${boss}", another agent session that cannot see this terminal. ` +
 		`At the START of every turn call boss_read once and follow what it says. When a piece of work is done, boss_post ` +
@@ -90,18 +90,23 @@ export default function bossCall() {
 			},
 			{
 				name: "boss_wait",
-				description: "Block until mail for you arrives, then return it (acknowledged). Call this instead of ending your turn when you have nothing to do; on timeout, call it again.",
+				description: "Wait on the line. Blocks until mail for you arrives and returns it (acknowledged). Call it once when you have nothing left to do; it comes back only with mail, after 30 minutes, or when the person interrupts — then call it again.",
 				parameters: {
 					type: "object",
-					properties: { timeoutSeconds: { type: "integer", minimum: 5, maximum: 600, description: "default 110" } },
+					properties: { timeoutSeconds: { type: "integer", minimum: 5, maximum: 7200, description: "default 1800" } },
 					additionalProperties: false,
 				},
-				execute: async (input) =>
-					run(() => {
-						const msgs = waitForMail(room, name, { timeoutMs: (input.timeoutSeconds ?? 110) * 1000 });
-						if (!msgs.length) return `(no mail in ${input.timeoutSeconds ?? 110}s — call boss_wait again to keep listening)`;
-						return msgs.map(formatMessage).join("\n") + "\n(act on this, post a status, then boss_wait again)";
-					}),
+				execute: async (input, ctx) => {
+					const secs = input.timeoutSeconds ?? 1800;
+					try {
+						const msgs = await waitForMailAsync(room, name, { timeoutMs: secs * 1000, signal: ctx?.signal });
+						if (ctx?.signal?.aborted) return { content: "(wait interrupted by the person at this terminal — do what they say)", isError: false };
+						if (!msgs.length) return { content: `NO MAIL YET after ${secs}s. Call boss_wait again now; do not end your turn.`, isError: false };
+						return { content: msgs.map(formatMessage).join("\n") + "\n(act on this, post a status, then boss_wait again)", isError: false };
+					} catch (err) {
+						return { content: `[boss-call] ${err.message}`, isError: true };
+					}
+				},
 			},
 		],
 		approvals: [{ decide: (call) => (["boss_read", "boss_post", "boss_wait"].includes(call.name) ? { action: "allow" } : { action: "ask" }) }],

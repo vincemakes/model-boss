@@ -27,9 +27,16 @@ boss-call wait
 ```
 
 It blocks until mail for you arrives, prints it acknowledged, and returns.
-On timeout (25s by default, under every harness's shell-tool limit) it prints
-nothing new; run it again. If your shell tool allows longer calls, pass
-`--timeout 110` and raise the tool's own limit to match. **Do not end your turn to
+Set your shell tool's timeout to its maximum and pass a `--timeout` just
+under it, so the call rarely comes back empty:
+
+- Claude Code: `boss-call wait --timeout 590` with the Bash tool's `timeout` 600000
+- kiso shell tool: `boss-call wait --timeout 590` with `timeoutMs` 600000
+- a tool with a fixed 30 s limit: `boss-call wait --timeout 25`
+
+If it does come back empty, run it again at once. **An ended turn is a
+dropped line: nobody can call you back.** Do not summarize and stop after an
+empty wait; the summary goes in your status post, before you wait. **Do not end your turn to
 wait; waiting is `boss-call wait`.** The person at this terminal can still
 type; if they do, their instruction wins.
 

@@ -258,6 +258,33 @@ export function waitForMail(room, me, { timeoutMs = 25_000, pollMs = 1000, all =
 	}
 }
 
+/** The same wait without blocking the event loop, for a harness that runs
+ *  tools in-process: resolves with mail, [] on timeout, or [] when `signal`
+ *  aborts (the person interrupted — that is not an error). */
+export async function waitForMailAsync(room, me, { timeoutMs = 1_800_000, pollMs = 1000, all = false, signal } = {}) {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		if (signal?.aborted) return [];
+		heartbeat(room, me, "waiting");
+		const msgs = unread(room, me, { all });
+		if (msgs.length) {
+			ack(room, me);
+			heartbeat(room, me, "working");
+			return msgs;
+		}
+		if (Date.now() >= deadline) return [];
+		await new Promise((resolve) => {
+			const t = setTimeout(done, Math.min(pollMs, Math.max(0, deadline - Date.now())));
+			function done() {
+				signal?.removeEventListener?.("abort", done);
+				clearTimeout(t);
+				resolve();
+			}
+			signal?.addEventListener?.("abort", done, { once: true });
+		});
+	}
+}
+
 export function status(room) {
 	const data = loadRoom(room);
 	const msgs = readMessages(room);

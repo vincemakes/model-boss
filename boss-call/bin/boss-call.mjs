@@ -8,6 +8,7 @@
  *   boss-call who                        which side you are on
  *   boss-call read [--ack]               unread mail for you
  *   boss-call wait [--timeout 25]        block until mail arrives (acknowledged), then print it
+ *                                        (--timeout 590 with a 600 s shell-tool timeout: fewer empty returns)
  *   boss-call post [--kind K] "text"     a member: to the boss; the boss: --to <member>|all
  *   boss-call status | tail [-n N]       the room at a glance
  *   boss-call serve [--once]             run unattended: mail -> one kiso turn -> status
@@ -156,7 +157,7 @@ function main(argv) {
 			const timeout = Number.parseInt(flags.timeout ?? "25", 10); // under every harness's shell-tool timeout (kiso: 30s)
 			const msgs = waitForMail(room, name, { timeoutMs: timeout * 1000, all: Boolean(flags.all) });
 			if (!msgs.length) {
-				console.log(`(no mail for ${name} in ${timeout}s — run \`boss-call wait\` again to keep listening; --timeout N waits longer if your shell tool allows)`);
+				console.log(`NO MAIL YET for ${name} after ${timeout}s. You are on the line only while this command runs.\nRun \`boss-call wait --timeout ${timeout}\` again NOW, with the same shell-tool timeout. Do not summarize, do not end your turn: an ended turn is a dropped line and nobody can call you back.`);
 				return 0;
 			}
 			for (const m of msgs) console.log(formatMessage(m));

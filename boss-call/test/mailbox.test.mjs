@@ -108,3 +108,18 @@ test("waitForMail times out empty and leaves a waiting heartbeat", () => {
 	assert.ok(Date.now() - t0 >= 190);
 	assert.equal(M.readHeartbeat("r1", "b").state, "waiting");
 });
+
+test("waitForMailAsync resolves on mail, and resolves [] promptly when the signal aborts", async () => {
+	const ac = new AbortController();
+	const t0 = Date.now();
+	const aborted = M.waitForMailAsync("r1", "b", { timeoutMs: 10_000, pollMs: 50, signal: ac.signal });
+	setTimeout(() => ac.abort(), 120);
+	assert.deepEqual(await aborted, []);
+	assert.ok(Date.now() - t0 < 2000, "abort ended the wait, not the timeout");
+
+	const p = M.waitForMailAsync("r1", "b", { timeoutMs: 5000, pollMs: 50 });
+	setTimeout(() => M.post("r1", { from: "boss", to: "b", text: "async wake" }), 150);
+	const msgs = await p;
+	assert.equal(msgs.at(-1).text, "async wake");
+	assert.deepEqual(M.unread("r1", "b"), []);
+});
