@@ -217,6 +217,47 @@ export function ack(room, me) {
 	return last;
 }
 
+// ---------------------------------------------------------------------------
+// waiting: the universal delivery. A session that has nothing to do blocks in
+// `wait`; the call returns when mail arrives. Every harness has a shell tool
+// and a blocking tool call, so no harness feature (loops, hooks, a supervisor)
+// is needed. While it waits it leaves a heartbeat so the boss can see who is
+// listening.
+// ---------------------------------------------------------------------------
+
+export function heartbeat(room, name, state) {
+	const d = join(roomDir(room), "heartbeats");
+	mkdirSync(d, { recursive: true });
+	writeFileSync(join(d, name), JSON.stringify({ ts: new Date().toISOString(), state }) + "\n");
+}
+
+export function readHeartbeat(room, name) {
+	const p = join(HOME, room, "heartbeats", name);
+	if (!existsSync(p)) return null;
+	try {
+		return JSON.parse(readFileSync(p, "utf8"));
+	} catch {
+		return null;
+	}
+}
+
+/** Block until mail for `me` arrives or `timeoutMs` passes. Returns the mail
+ *  (acknowledged) or [] on timeout. Polls the file; cheap and portable. */
+export function waitForMail(room, me, { timeoutMs = 110_000, pollMs = 1000, all = false } = {}) {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		heartbeat(room, me, "waiting");
+		const msgs = unread(room, me, { all });
+		if (msgs.length) {
+			ack(room, me);
+			heartbeat(room, me, "working");
+			return msgs;
+		}
+		if (Date.now() >= deadline) return [];
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(pollMs, Math.max(0, deadline - Date.now())));
+	}
+}
+
 export function status(room) {
 	const data = loadRoom(room);
 	const msgs = readMessages(room);
@@ -228,7 +269,9 @@ export function status(room) {
 		rows: names.map((n) => {
 			const cur = getCursor(room, n);
 			const un = msgs.filter((m) => m.seq > cur && addressed(m, n));
+			const hb = readHeartbeat(room, n);
 			return {
+				heartbeat: hb,
 				name: n,
 				role: n === data.boss?.name ? "boss" : "member",
 				unread: un.length,

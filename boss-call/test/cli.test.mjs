@@ -63,3 +63,18 @@ test("help prints the command table; unknown command exits 2", () => {
 	assert.match(bc(["help"]), /boss-call join <room> --as <name>/);
 	assert.throws(() => bc(["frobnicate"]), /unknown command frobnicate/);
 });
+
+test("wait blocks until the boss posts, then prints acknowledged mail; status shows who is listening", async () => {
+	const { execFile } = await import("node:child_process");
+	const e = { ...process.env, BOSS_CALL_HOME: HOME, KISO_HOME };
+	delete e.BOSS_CALL_ROOM;
+	delete e.BOSS_CALL_ME;
+	const waiting = new Promise((res, rej) => execFile(process.execPath, [BIN, "wait", "--timeout", "10"], { cwd: A, env: e, encoding: "utf8" }, (err, out) => (err ? rej(err) : res(out))));
+	await new Promise((r) => setTimeout(r, 400));
+	assert.match(bc(["status"]), /member alpha\s+unread=\s+0 asks=\s+0 listening/);
+	bc(["post", "--me", "boss", "--to", "alpha", "now do this"]);
+	const out = await waiting;
+	assert.match(out, /boss -> alpha \[msg\]\nnow do this/);
+	assert.match(out, /acked through #\d+; act on this/);
+	assert.match(bc(["wait", "--timeout", "1"], { cwd: A }), /no mail for alpha in 1s/);
+});

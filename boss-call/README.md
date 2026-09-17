@@ -66,9 +66,22 @@ boss-call read --ack
 boss-call tail -n 30
 ```
 
-Nothing wakes a session by itself. A member sees mail when its next turn
-starts; the Boss sees replies when it next reads. A person sitting at the boss
-keyboard reads member terminals directly and needs nothing beyond `status`.
+Then, in that repo, start any agent session the way you always do and say
+one thing: **follow the boss-call skill**. From then on it reads its mail,
+works, reports, and waits for the next mail on its own.
+
+## How delivery works
+
+No scheduler, no daemon, no harness feature. A session that has nothing to do
+runs `boss-call wait`, which blocks until mail for it arrives and then prints
+it. Every harness has a shell tool and a blocking tool call, so this works
+the same in Claude Code, Codex, pi, opencode and kiso. While it waits it
+spends no tokens; on timeout it runs `wait` again. The person keeps the
+keyboard: they watch their normal TUI and can type over it at any time.
+
+The Boss does the same: answer mail, direct, `boss-call wait`. `boss-call
+status` shows who is `listening` right now, who took mail and is `working`,
+and who has `never listened`.
 
 ## The two rules
 
@@ -76,8 +89,10 @@ Mail is never a person's authorization. Money, pushes, merges, deploys, and
 production config stay with the person at that terminal; a member asks them and
 says "waiting on the person" in its status.
 
-One matter per message. A status is ten lines of facts: done, not done,
-blocked on. An ask is one decision with options and a preference.
+Stay on the line. A session that ends its turn is off the line until a person
+types again; waiting is `boss-call wait`. One matter per message. A status is
+ten lines of facts: done, not done, blocked on. An ask is one decision with
+options and a preference.
 
 ## Layout
 
@@ -90,13 +105,13 @@ blocked on. An ask is one decision with options and a preference.
 Kinds: `msg`, `ask`, `reply`, `status`. A member's post goes to the boss and
 nowhere else; the boss must name `--to <member>` or `--to all`.
 
-## Unattended (harnesses with a headless resume)
+## No terminal at all (harnesses with a headless resume)
 
-A session can be driven by mail alone when its harness can resume a session
-headlessly with a prompt. `serve` polls, hands each batch of mail to the
+When nobody will start a session in a repo, a supervisor can do it on mail. `serve` polls, hands each batch of mail to the
 harness as one turn, acknowledges the mail only after the run exits (a crash
 re-delivers it), and if the model posted nothing, posts a status from the
-session log tagged `[auto]`. The Boss can be served too.
+session log tagged `[auto]`. The Boss can be served too. This is optional; the normal case is a session
+someone opened, kept on the line by `wait`.
 
 ```bash
 cd ~/work/reelfo && boss-call join migration --as reelfo --profile co --env-file ~/.config/agent/creds.env

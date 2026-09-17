@@ -86,3 +86,25 @@ test("posting under contention keeps seq unique", async () => {
 	assert.equal(new Set(seqs).size, seqs.length);
 	void execFileSync;
 });
+
+test("waitForMail returns as soon as mail lands, acknowledged, and leaves a heartbeat", async () => {
+	const { execFile } = await import("node:child_process");
+	const t0 = Date.now();
+	const script = `setTimeout(() => import("${new URL("../src/mailbox.mjs", import.meta.url).pathname}").then(M => M.post("r1", { from: "boss", to: "b", text: "wake up" })), 300)`;
+	const child = new Promise((res, rej) => execFile(process.execPath, ["--input-type=module", "-e", script], { env: process.env }, (err) => (err ? rej(err) : res())));
+	M.ack("r1", "b");
+	const msgs = M.waitForMail("r1", "b", { timeoutMs: 5000, pollMs: 50 });
+	await child;
+	assert.equal(msgs.at(-1).text, "wake up");
+	assert.ok(Date.now() - t0 < 3000, "returned promptly, not at the timeout");
+	assert.deepEqual(M.unread("r1", "b"), []); // acknowledged
+	assert.equal(M.readHeartbeat("r1", "b").state, "working");
+	assert.equal(M.status("r1").rows.find((r) => r.name === "b").heartbeat.state, "working");
+});
+
+test("waitForMail times out empty and leaves a waiting heartbeat", () => {
+	const t0 = Date.now();
+	assert.deepEqual(M.waitForMail("r1", "b", { timeoutMs: 200, pollMs: 50 }), []);
+	assert.ok(Date.now() - t0 >= 190);
+	assert.equal(M.readHeartbeat("r1", "b").state, "waiting");
+});

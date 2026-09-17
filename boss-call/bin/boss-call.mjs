@@ -7,6 +7,7 @@
  *   boss-call join <room> --as <name>    join a room as a member; the current directory is your repo
  *   boss-call who                        which side you are on
  *   boss-call read [--ack]               unread mail for you
+ *   boss-call wait [--timeout 110]       block until mail arrives (acknowledged), then print it
  *   boss-call post [--kind K] "text"     a member: to the boss; the boss: --to <member>|all
  *   boss-call status | tail [-n N]       the room at a glance
  *   boss-call serve [--once]             run unattended: mail -> one kiso turn -> status
@@ -19,7 +20,7 @@ import { existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } f
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BossCallError, ack, formatMessage, host, identify, joinRoom, listRooms, loadRoom, post, readMessages, resolveRoom, status, unread } from "../src/mailbox.mjs";
+import { BossCallError, ack, formatMessage, heartbeat, host, identify, joinRoom, loadRoom, post, readMessages, resolveRoom, status, unread, waitForMail } from "../src/mailbox.mjs";
 import { peek } from "../src/peek.mjs";
 import { serve } from "../src/serve.mjs";
 
@@ -132,7 +133,7 @@ function main(argv) {
 		case "status": {
 			const s = status(room);
 			console.log(`room ${room}: boss=${s.boss ?? "-"}  ${s.total} messages`);
-			for (const r of s.rows) console.log(`  ${r.role.padEnd(6)} ${r.name.padEnd(12)} unread=${String(r.unread).padStart(3)} asks=${String(r.asks).padStart(2)} last-posted=${r.lastPosted ?? "-"}`);
+			for (const r of s.rows) console.log(`  ${r.role.padEnd(6)} ${r.name.padEnd(12)} unread=${String(r.unread).padStart(3)} asks=${String(r.asks).padStart(2)} ${presence(r.heartbeat).padEnd(22)} last-posted=${r.lastPosted ?? "-"}`);
 			return 0;
 		}
 		case "tail": {
@@ -148,6 +149,18 @@ function main(argv) {
 				for (const m of msgs) console.log(formatMessage(m));
 				if (flags.ack) console.log(`(acked through #${ack(room, name)})`);
 			}
+			return 0;
+		}
+		case "wait": {
+			const { name } = identify(room, flags.me, flags.cwd);
+			const timeout = Number.parseInt(flags.timeout ?? "110", 10);
+			const msgs = waitForMail(room, name, { timeoutMs: timeout * 1000, all: Boolean(flags.all) });
+			if (!msgs.length) {
+				console.log(`(no mail for ${name} in ${timeout}s — run \`boss-call wait\` again to keep listening)`);
+				return 0;
+			}
+			for (const m of msgs) console.log(formatMessage(m));
+			console.log(`(acked through #${msgs.at(-1).seq}; act on this, post a status, then \`boss-call wait\` again)`);
 			return 0;
 		}
 		case "ack": {
@@ -184,6 +197,14 @@ function kisoOpts(flags) {
 	return Object.keys(k).length ? k : undefined;
 }
 
+function presence(hb) {
+	if (!hb) return "never listened";
+	const age = (Date.now() - Date.parse(hb.ts)) / 1000;
+	if (hb.state === "waiting" && age < 180) return "listening";
+	const ago = age < 90 ? `${Math.round(age)}s` : age < 5400 ? `${Math.round(age / 60)}m` : `${Math.round(age / 3600)}h`;
+	return `${hb.state} ${ago} ago`;
+}
+
 function cmdWho({ room, me, cwd }) {
 	const data = loadRoom(room);
 	let who = { name: "?", role: "unknown" };
@@ -197,6 +218,7 @@ function cmdWho({ room, me, cwd }) {
 	for (const [n, m] of Object.entries(data.members)) console.log(`  ${n.padEnd(12)} ${m.root ?? ""}`);
 	if (who.role === "member") console.log(`\nyou talk only to ${data.boss?.name}: \`boss-call post "..."\` goes there by default.`);
 	else if (who.role === "boss") console.log("\nyou may `post --to <member>` or `--to all`; members can only reach you.");
+	if (who.role !== "unknown") console.log("to put an agent session started here on the line, tell it: follow the boss-call skill");
 	return 0;
 }
 
