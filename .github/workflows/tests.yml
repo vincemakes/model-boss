@@ -20,4 +20,4 @@ jobs:
           python-version: "3.13"
       - run: python3 -m pip install pyyaml
       - run: python3 -m unittest discover -s tests
-      - run: python3 -m runtime.model_boss.package --repo-root . --validate dist/model-boss.skill
+      - run: PYTHONPATH=boss-dispatch python3 -m runtime.model_boss.package --repo-root . --validate dist/boss-dispatch.skill

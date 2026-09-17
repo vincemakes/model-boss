@@ -12,6 +12,15 @@ Big models think. Small models ship.
 
 Canonical repository: [https://github.com/vincemakes/model-boss](https://github.com/vincemakes/model-boss)
 
+**Two skills, one repo.** Install once, then say what you want — the skill decides from context.
+
+| Skill | Say this | What it does |
+|---|---|---|
+| `boss-dispatch` | `让 opus 去写，你来审` · `走 model boss max` · `省token` · `分层干活` | Plans, dispatches a worker, gates the work, and audits the evidence while the inherited main loop keeps authority. This is the Model Boss orchestration skill, previously named `model-boss`. |
+| `boss-call` | `看看三个终端做得怎样` · `给 reelfo 发指令` | A single-line mailbox between one Boss and several member sessions; members report at the start of each turn. |
+
+The dispatch skill moved from the repository root into `boss-dispatch/` and its skill name changed `model-boss` → `boss-dispatch`; trigger phrases are unchanged, so re-run `bash boss-dispatch/install.sh` after updating.
+
 ## Usage
 
 After install (see the Claude Code and Codex setup sections below) there is no command to run — you invoke Model Boss conversationally. Phrases like `model boss`, `save model tokens`, or `分层干活` trigger the skill; then describe the topology you want:
@@ -108,7 +117,7 @@ worker_delta_hash
 projected_task_patch_hash
 ```
 
-If any evidence or destination state changes, the old approval cannot be reused. The full state, evidence, retry, and integration contract is in the [protocol reference](references/protocol.md).
+If any evidence or destination state changes, the old approval cannot be reused. The full state, evidence, retry, and integration contract is in the [protocol reference](boss-dispatch/references/protocol.md).
 
 ## Model profiles, not model lock-in
 
@@ -143,7 +152,7 @@ python3 <model-boss-skill-root>/scripts/model-boss.py estimate --profile anthrop
 
 `match-models` maps the model names in a request to routes with longest-match-wins and reports an unknown version (`fable 6`) as `needs_context` instead of guessing. `estimate` prices inline, Lite, and Max for the task shape, charging the worker's cold start (caches are model-scoped and subagents never read the main loop's cache), delegated volume, and expected rework, then applies the `pace` policy described above, or the cost objectives `weighted` and `main-model` on request; its coefficients are calibrated on the recorded runs and are a proxy, not a bill.
 
-Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. The published examples and schema are [`config/model-boss.example.json`](config/model-boss.example.json) and [`config/model-boss.schema.json`](config/model-boss.schema.json); project discovery uses `.model-boss.json`. On POSIX, user discovery uses `$XDG_CONFIG_HOME/model-boss/config.json` only when `XDG_CONFIG_HOME` is absolute; otherwise it uses `$HOME/.config/model-boss/config.json`. On PowerShell, an absolute `$env:XDG_CONFIG_HOME` wins; otherwise the runtime reads absolute `$env:HOME` and falls back to absolute `$env:USERPROFILE` only when HOME is absent. The displayed fallback `$HOME\.config\model-boss\config.json` uses PowerShell's `$HOME` convenience variable. Missing or relative selected roots fail closed. See [routing and capability resolution](references/routing.md) for the complete rules.
+Built-in profiles cover Claude, OpenAI, and Kimi examples, while project and user configuration can replace route definitions. Resolution follows profile → user → project → per-run precedence and never mutates the inherited main loop. The published examples and schema are [`config/model-boss.example.json`](boss-dispatch/config/model-boss.example.json) and [`config/model-boss.schema.json`](boss-dispatch/config/model-boss.schema.json); project discovery uses `.model-boss.json`. On POSIX, user discovery uses `$XDG_CONFIG_HOME/model-boss/config.json` only when `XDG_CONFIG_HOME` is absolute; otherwise it uses `$HOME/.config/model-boss/config.json`. On PowerShell, an absolute `$env:XDG_CONFIG_HOME` wins; otherwise the runtime reads absolute `$env:HOME` and falls back to absolute `$env:USERPROFILE` only when HOME is absent. The displayed fallback `$HOME\.config\model-boss\config.json` uses PowerShell's `$HOME` convenience variable. Missing or relative selected roots fail closed. See [routing and capability resolution](boss-dispatch/references/routing.md) for the complete rules.
 
 The runtime CLI requires Python 3.11+ and Git. The POSIX setup examples also use `bash` and `install`. A write-capable external worker additionally requires a verified OS backend: `/usr/bin/sandbox-exec` on macOS or Bubblewrap (`bwrap`) on Linux, including WSL. Native Windows has no external-writer backend and uses host-native Claude Code or Codex agents instead.
 
@@ -154,11 +163,11 @@ These are fresh-install commands. Each scope installs the skill plus the four ho
 ### POSIX — user scope
 
 ```bash
-mkdir -p "$HOME/.claude/skills"
-git clone https://github.com/vincemakes/model-boss.git "$HOME/.claude/skills/model-boss"
+git clone https://github.com/vincemakes/model-boss.git "$HOME/.local/share/model-boss"
+bash "$HOME/.local/share/model-boss/boss-dispatch/install.sh"
 mkdir -p "$HOME/.claude/agents"
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 "$HOME/.claude/skills/model-boss/assets/agents/claude-code/$role.md" \
+  install -m 0644 "$HOME/.claude/skills/boss-dispatch/assets/agents/claude-code/$role.md" \
     "$HOME/.claude/agents/model-boss-$role.md"
 done
 ```
@@ -166,11 +175,12 @@ done
 ### POSIX — project scope
 
 ```bash
+git clone https://github.com/vincemakes/model-boss.git .model-boss
 mkdir -p .claude/skills
-git clone https://github.com/vincemakes/model-boss.git .claude/skills/model-boss
+ln -sfn "$PWD/.model-boss/boss-dispatch" .claude/skills/boss-dispatch
 mkdir -p .claude/agents
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 ".claude/skills/model-boss/assets/agents/claude-code/$role.md" \
+  install -m 0644 ".claude/skills/boss-dispatch/assets/agents/claude-code/$role.md" \
     ".claude/agents/model-boss-$role.md"
 done
 ```
@@ -178,10 +188,14 @@ done
 ### PowerShell — user scope
 
 ```powershell
-$skill = Join-Path $HOME ".claude\skills\model-boss"
+$repo = Join-Path $HOME ".local\share\model-boss"
+$skill = Join-Path $HOME ".claude\skills\boss-dispatch"
 $agents = Join-Path $HOME ".claude\agents"
+New-Item -ItemType Directory -Force (Split-Path $repo -Parent) | Out-Null
+git clone https://github.com/vincemakes/model-boss.git $repo
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/model-boss.git $skill
+if (Test-Path $skill) { Remove-Item -Recurse -Force $skill }
+New-Item -ItemType SymbolicLink -Path $skill -Target (Join-Path $repo "boss-dispatch") | Out-Null
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\claude-code\$role.md") `
@@ -192,10 +206,13 @@ foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
 ### PowerShell — project scope
 
 ```powershell
-$skill = ".claude\skills\model-boss"
+$repo = ".model-boss"
+$skill = ".claude\skills\boss-dispatch"
 $agents = ".claude\agents"
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/model-boss.git $skill
+git clone https://github.com/vincemakes/model-boss.git $repo
+if (Test-Path $skill) { Remove-Item -Recurse -Force $skill }
+New-Item -ItemType SymbolicLink -Path $skill -Target (Join-Path $repo "boss-dispatch") | Out-Null
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\claude-code\$role.md") `
@@ -218,11 +235,12 @@ The bundled Sol profile treats Sol as an authority route, Terra as a balanced ro
 ### POSIX — project scope
 
 ```bash
-mkdir -p .agents/skills
-git clone https://github.com/vincemakes/model-boss.git .agents/skills/model-boss
+git clone https://github.com/vincemakes/model-boss.git .model-boss
+mkdir -p .codex/skills
+ln -sfn "$PWD/.model-boss/boss-dispatch" .codex/skills/boss-dispatch
 mkdir -p .codex/agents
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 ".agents/skills/model-boss/assets/agents/codex/$role.toml" \
+  install -m 0644 ".codex/skills/boss-dispatch/assets/agents/codex/$role.toml" \
     ".codex/agents/model-boss-$role.toml"
 done
 ```
@@ -230,11 +248,11 @@ done
 ### POSIX — user scope
 
 ```bash
-mkdir -p "$HOME/.agents/skills"
-git clone https://github.com/vincemakes/model-boss.git "$HOME/.agents/skills/model-boss"
+git clone https://github.com/vincemakes/model-boss.git "$HOME/.local/share/model-boss"
+bash "$HOME/.local/share/model-boss/boss-dispatch/install.sh"
 mkdir -p "$HOME/.codex/agents"
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 "$HOME/.agents/skills/model-boss/assets/agents/codex/$role.toml" \
+  install -m 0644 "$HOME/.codex/skills/boss-dispatch/assets/agents/codex/$role.toml" \
     "$HOME/.codex/agents/model-boss-$role.toml"
 done
 ```
@@ -242,10 +260,13 @@ done
 ### PowerShell — project scope
 
 ```powershell
-$skill = ".agents\skills\model-boss"
+$repo = ".model-boss"
+$skill = ".codex\skills\boss-dispatch"
 $agents = ".codex\agents"
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/model-boss.git $skill
+git clone https://github.com/vincemakes/model-boss.git $repo
+if (Test-Path $skill) { Remove-Item -Recurse -Force $skill }
+New-Item -ItemType SymbolicLink -Path $skill -Target (Join-Path $repo "boss-dispatch") | Out-Null
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\codex\$role.toml") `
@@ -256,10 +277,14 @@ foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
 ### PowerShell — user scope
 
 ```powershell
-$skill = Join-Path $HOME ".agents\skills\model-boss"
+$repo = Join-Path $HOME ".local\share\model-boss"
+$skill = Join-Path $HOME ".codex\skills\boss-dispatch"
 $agents = Join-Path $HOME ".codex\agents"
+New-Item -ItemType Directory -Force (Split-Path $repo -Parent) | Out-Null
+git clone https://github.com/vincemakes/model-boss.git $repo
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/model-boss.git $skill
+if (Test-Path $skill) { Remove-Item -Recurse -Force $skill }
+New-Item -ItemType SymbolicLink -Path $skill -Target (Join-Path $repo "boss-dispatch") | Out-Null
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\codex\$role.toml") `
@@ -379,7 +404,7 @@ declared gates, and seals the delta without changing the source repository. An
 approving final review writes an invocation-bound receipt; integration accepts only
 the manifest and never a caller-supplied approval file.
 
-See the [external CLI contract](references/adapters/external-cli.md) for the exact task
+See the [external CLI contract](boss-dispatch/references/adapters/external-cli.md) for the exact task
 and review-context schemas. Do not run a bypass alias directly from an ordinary
 repository; without the one-shot invocation manifest it fails closed. These same
 manifest and command contracts can be driven by either a Claude Code or Codex main
@@ -459,7 +484,7 @@ Old JSON credentials are never auto-copied. Manually copy an old JSON credential
 | Former surface | Model Boss surface |
 |---|---|
 | `https://github.com/vincemakes/token-saver` | `https://github.com/vincemakes/model-boss` |
-| `.claude/skills/token-saver`, `.agents/skills/token-saver` | `.claude/skills/model-boss`, `.agents/skills/model-boss` |
+| `.claude/skills/token-saver`, `.agents/skills/token-saver` | `.claude/skills/boss-dispatch`, `.agents/skills/boss-dispatch` |
 | `scripts/token-saver-route.py` | `scripts/model-boss.py` |
 | `runtime.token_saver` | `runtime.model_boss` |
 | `.token-saver.json` | `.model-boss.json` |

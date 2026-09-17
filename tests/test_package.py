@@ -11,7 +11,8 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CANONICAL_PACKAGE_PATH = ROOT / "runtime" / "model_boss" / "package.py"
+SKILL_ROOT = ROOT / "boss-dispatch"
+CANONICAL_PACKAGE_PATH = SKILL_ROOT / "runtime" / "model_boss" / "package.py"
 
 if CANONICAL_PACKAGE_PATH.is_file():
     import runtime.model_boss.package as package_module
@@ -20,6 +21,7 @@ if CANONICAL_PACKAGE_PATH.is_file():
         PACKAGE_MANIFEST,
         PackageError,
         build_package,
+        source_path,
         validate_package,
     )
 
@@ -37,7 +39,7 @@ class CanonicalPackageModuleTests(unittest.TestCase):
     "canonical package module has not been migrated yet",
 )
 class PackageTests(unittest.TestCase):
-    def _build(self, directory: Path, name: str = "model-boss.skill") -> Path:
+    def _build(self, directory: Path, name: str = "boss-dispatch.skill") -> Path:
         output = directory / name
         result = build_package(ROOT, output)
         self.assertEqual(result.output_path, output.resolve())
@@ -68,10 +70,10 @@ class PackageTests(unittest.TestCase):
             output = self._build(Path(text))
             with zipfile.ZipFile(output) as archive:
                 names = archive.namelist()
-                expected = [f"model-boss/{path}" for path in sorted(PACKAGE_MANIFEST, key=lambda p: p.encode("utf-8"))]
+                expected = [f"boss-dispatch/{path}" for path in sorted(PACKAGE_MANIFEST, key=lambda p: p.encode("utf-8"))]
                 self.assertEqual(names, expected)
                 self.assertEqual(len(names), len(set(names)))
-                self.assertTrue(all(name.startswith("model-boss/") for name in names))
+                self.assertTrue(all(name.startswith("boss-dispatch/") for name in names))
                 self.assertTrue(all("\\" not in name for name in names))
                 self.assertTrue(all(not name.startswith("/") for name in names))
                 self.assertTrue(all(".." not in Path(name).parts for name in names))
@@ -95,12 +97,12 @@ class PackageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="model-boss-package-test-") as text:
             output = self._build(Path(text))
             result = validate_package(ROOT, output)
-            self.assertEqual(result.skill_sha256, hashlib.sha256((ROOT / "SKILL.md").read_bytes()).hexdigest())
+            self.assertEqual(result.skill_sha256, hashlib.sha256((SKILL_ROOT / "SKILL.md").read_bytes()).hexdigest())
             with zipfile.ZipFile(output) as archive:
                 self.assertEqual(archive.comment, b"")
-                self.assertEqual(archive.read("model-boss/SKILL.md"), (ROOT / "SKILL.md").read_bytes())
+                self.assertEqual(archive.read("boss-dispatch/SKILL.md"), (SKILL_ROOT / "SKILL.md").read_bytes())
                 for info in archive.infolist():
-                    relative = info.filename.removeprefix("model-boss/")
+                    relative = info.filename.removeprefix("boss-dispatch/")
                     with self.subTest(path=relative):
                         self.assertEqual(info.compress_type, zipfile.ZIP_STORED)
                         self.assertEqual(info.date_time, (1980, 1, 1, 0, 0, 0))
@@ -119,7 +121,7 @@ class PackageTests(unittest.TestCase):
             self.assertEqual(first.read_bytes(), second.read_bytes())
 
     def test_unlisted_controlled_file_and_symlink_are_rejected(self) -> None:
-        sentinel = ROOT / "references" / "unlisted-sentinel.txt"
+        sentinel = SKILL_ROOT / "references" / "unlisted-sentinel.txt"
         self.assertFalse(os.path.lexists(sentinel))
         try:
             sentinel.write_text("must reject\n", encoding="utf-8")
@@ -130,9 +132,9 @@ class PackageTests(unittest.TestCase):
             sentinel.unlink(missing_ok=True)
 
         if hasattr(os, "symlink"):
-            link = ROOT / "references" / "unlisted-sentinel.txt"
+            link = SKILL_ROOT / "references" / "unlisted-sentinel.txt"
             try:
-                os.symlink(ROOT / "SKILL.md", link)
+                os.symlink(SKILL_ROOT / "SKILL.md", link)
                 with tempfile.TemporaryDirectory(prefix="model-boss-package-test-") as text:
                     with self.assertRaisesRegex(PackageError, "symlink|unlisted"):
                         build_package(ROOT, Path(text) / "model-boss.skill")
@@ -142,7 +144,7 @@ class PackageTests(unittest.TestCase):
     def test_atomic_validation_failure_preserves_existing_destination(self) -> None:
         with tempfile.TemporaryDirectory(prefix="model-boss-package-test-") as text:
             directory = Path(text)
-            output = directory / "model-boss.skill"
+            output = directory / "boss-dispatch.skill"
             output.write_bytes(b"existing-package")
             with mock.patch.object(
                 package_module,
@@ -152,7 +154,7 @@ class PackageTests(unittest.TestCase):
                 with self.assertRaisesRegex(PackageError, "injected"):
                     build_package(ROOT, output)
             self.assertEqual(output.read_bytes(), b"existing-package")
-            self.assertEqual({path.name for path in directory.iterdir()}, {"model-boss.skill"})
+            self.assertEqual({path.name for path in directory.iterdir()}, {"boss-dispatch.skill"})
 
     def test_obsolete_artifact_name_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="model-boss-package-test-") as text:
@@ -170,7 +172,7 @@ class PackageTests(unittest.TestCase):
 
     def test_manifest_sources_are_regular_non_symlinks(self) -> None:
         for relative in PACKAGE_MANIFEST:
-            path = ROOT / relative
+            path = source_path(ROOT, relative)
             metadata = os.lstat(path)
             with self.subTest(path=relative):
                 self.assertTrue(stat.S_ISREG(metadata.st_mode))

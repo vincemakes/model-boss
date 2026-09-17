@@ -101,7 +101,7 @@ class EvaluationBrandingTests(unittest.TestCase):
         evals = json.loads(
             (ROOT / "evals" / "evals.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(evals["skill_name"], "model-boss")
+        self.assertEqual(evals["skill_name"], "boss-dispatch")
 
     def test_benchmark_identifies_neutral_predecessor_provenance(self) -> None:
         benchmark = json.loads(

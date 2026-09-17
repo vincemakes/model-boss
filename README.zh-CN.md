@@ -12,6 +12,15 @@ Big models think. Small models ship.
 
 项目地址：<https://github.com/vincemakes/model-boss>
 
+**一个仓，两个 Skill。** 安装一次，之后直接说你要什么——由 skill 判断上下文。
+
+| Skill | 说这句话 | 做什么 |
+|---|---|---|
+| `boss-dispatch` | `让 opus 去写，你来审` · `走 model boss max` · `省token` · `分层干活` | 规划、派发 Worker、过闸并审计证据，权威始终留在继承的主循环；这就是今天的 Model Boss 编排 Skill，原 skill 名 `model-boss`。 |
+| `boss-call` | `看看三个终端做得怎样` · `给 reelfo 发指令` | 一个 Boss 与多个成员会话之间的单线信箱；成员每轮开头汇报。 |
+
+主 skill 从仓根搬进 `boss-dispatch/`，skill 名从 `model-boss` 改成 `boss-dispatch`；触发词不变，更新后重新运行 `bash boss-dispatch/install.sh` 即可。
+
 ## 用法
 
 安装完成后（见下方 Claude Code / Codex 安装小节）不需要运行任何命令——直接在对话里说。`model boss`、`省token`、`分层干活` 这类短语会触发 Skill，然后描述你想要的拓扑：
@@ -108,8 +117,8 @@ Worker 最多自修三次。最终 Reviewer 最多提出两轮 `revise`；第三
 `source_snapshot_hash`、`worker_delta_hash` 与
 `projected_task_patch_hash`，集成前任一内容变化都会让旧审批失效。
 
-完整协议见 [SKILL.md](SKILL.md)、[协议参考](references/protocol.md) 与
-[路由规则](references/routing.md)。
+完整协议见 [SKILL.md](boss-dispatch/SKILL.md)、[协议参考](boss-dispatch/references/protocol.md) 与
+[路由规则](boss-dispatch/references/routing.md)。
 
 ## 模型 Profile，而非模型锁定
 
@@ -144,7 +153,7 @@ python3 <model-boss-skill-root>/scripts/model-boss.py estimate --profile anthrop
 `match-models` 按最长匹配把请求里的模型名映射到路由，目录里没有的版本（`fable 6`）返回 `needs_context` 而不是猜一个相近版本。`estimate` 按任务形状给 inline、Lite、Max 三种方案算账，计入 Worker 冷启动（缓存按模型隔离，子代理读不到主循环的缓存）、派工后的产出体积和预期返工，再套用上面的 `pace` 策略，或按需改用成本目标 `weighted`、`main-model`；系数按记录在案的两次运行校准，是代理值，不是账单。
 
 你可以增加未来模型或自定义 CLI 路由，只要它们声明能力和角色，并通过相同的身份、
-权限、沙箱与证据检查。发布的示例与 schema 是 [`config/model-boss.example.json`](config/model-boss.example.json) 和 [`config/model-boss.schema.json`](config/model-boss.schema.json)；项目自动发现 `.model-boss.json`。POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/config.json`，否则使用 `$HOME/.config/model-boss/config.json`。PowerShell 中，绝对的 `$env:XDG_CONFIG_HOME` 优先；否则运行时先读取绝对的 `$env:HOME`，只在 HOME 缺失时回退到绝对的 `$env:USERPROFILE`。文档显示的 `$HOME\.config\model-boss\config.json` 使用 PowerShell 的 `$HOME` 便捷变量。被选中的根路径缺失或为相对路径时会安全失败。Profile 文件位于 [references/profiles](references/profiles)。
+权限、沙箱与证据检查。发布的示例与 schema 是 [`config/model-boss.example.json`](boss-dispatch/config/model-boss.example.json) 和 [`config/model-boss.schema.json`](boss-dispatch/config/model-boss.schema.json)；项目自动发现 `.model-boss.json`。POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/config.json`，否则使用 `$HOME/.config/model-boss/config.json`。PowerShell 中，绝对的 `$env:XDG_CONFIG_HOME` 优先；否则运行时先读取绝对的 `$env:HOME`，只在 HOME 缺失时回退到绝对的 `$env:USERPROFILE`。文档显示的 `$HOME\.config\model-boss\config.json` 使用 PowerShell 的 `$HOME` 便捷变量。被选中的根路径缺失或为相对路径时会安全失败。Profile 文件位于 [references/profiles](boss-dispatch/references/profiles)。
 
 运行时 CLI 需要 Python 3.11+ 与 Git；POSIX 安装示例还会使用 `bash` 和 `install`。
 可写的外部 Worker 还必须有验证过的 OS 后端：macOS 使用
@@ -158,11 +167,11 @@ python3 <model-boss-skill-root>/scripts/model-boss.py estimate --profile anthrop
 **POSIX，用户级：**
 
 ```bash
-mkdir -p "$HOME/.claude/skills"
-git clone https://github.com/vincemakes/model-boss.git "$HOME/.claude/skills/model-boss"
+git clone https://github.com/vincemakes/model-boss.git "$HOME/.local/share/model-boss"
+bash "$HOME/.local/share/model-boss/boss-dispatch/install.sh"
 mkdir -p "$HOME/.claude/agents"
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 "$HOME/.claude/skills/model-boss/assets/agents/claude-code/$role.md" \
+  install -m 0644 "$HOME/.claude/skills/boss-dispatch/assets/agents/claude-code/$role.md" \
     "$HOME/.claude/agents/model-boss-$role.md"
 done
 ```
@@ -170,11 +179,12 @@ done
 **POSIX，项目级：**
 
 ```bash
+git clone https://github.com/vincemakes/model-boss.git .model-boss
 mkdir -p .claude/skills
-git clone https://github.com/vincemakes/model-boss.git .claude/skills/model-boss
+ln -sfn "$PWD/.model-boss/boss-dispatch" .claude/skills/boss-dispatch
 mkdir -p .claude/agents
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 ".claude/skills/model-boss/assets/agents/claude-code/$role.md" \
+  install -m 0644 ".claude/skills/boss-dispatch/assets/agents/claude-code/$role.md" \
     ".claude/agents/model-boss-$role.md"
 done
 ```
@@ -182,10 +192,14 @@ done
 **PowerShell，用户级：**
 
 ```powershell
-$skill = Join-Path $HOME ".claude\skills\model-boss"
+$repo = Join-Path $HOME ".local\share\model-boss"
+$skill = Join-Path $HOME ".claude\skills\boss-dispatch"
 $agents = Join-Path $HOME ".claude\agents"
+New-Item -ItemType Directory -Force (Split-Path $repo -Parent) | Out-Null
+git clone https://github.com/vincemakes/model-boss.git $repo
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/model-boss.git $skill
+if (Test-Path $skill) { Remove-Item -Recurse -Force $skill }
+New-Item -ItemType SymbolicLink -Path $skill -Target (Join-Path $repo "boss-dispatch") | Out-Null
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\claude-code\$role.md") `
@@ -196,10 +210,13 @@ foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
 **PowerShell，项目级：**
 
 ```powershell
-$skill = ".claude\skills\model-boss"
+$repo = ".model-boss"
+$skill = ".claude\skills\boss-dispatch"
 $agents = ".claude\agents"
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/model-boss.git $skill
+git clone https://github.com/vincemakes/model-boss.git $repo
+if (Test-Path $skill) { Remove-Item -Recurse -Force $skill }
+New-Item -ItemType SymbolicLink -Path $skill -Target (Join-Path $repo "boss-dispatch") | Out-Null
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\claude-code\$role.md") `
@@ -223,11 +240,12 @@ preflight / 预检必须确认当前 Codex 支持自定义 Agent、当前账号�
 **POSIX，项目级：**
 
 ```bash
-mkdir -p .agents/skills
-git clone https://github.com/vincemakes/model-boss.git .agents/skills/model-boss
+git clone https://github.com/vincemakes/model-boss.git .model-boss
+mkdir -p .codex/skills
+ln -sfn "$PWD/.model-boss/boss-dispatch" .codex/skills/boss-dispatch
 mkdir -p .codex/agents
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 ".agents/skills/model-boss/assets/agents/codex/$role.toml" \
+  install -m 0644 ".codex/skills/boss-dispatch/assets/agents/codex/$role.toml" \
     ".codex/agents/model-boss-$role.toml"
 done
 ```
@@ -235,11 +253,11 @@ done
 **POSIX，用户级：**
 
 ```bash
-mkdir -p "$HOME/.agents/skills"
-git clone https://github.com/vincemakes/model-boss.git "$HOME/.agents/skills/model-boss"
+git clone https://github.com/vincemakes/model-boss.git "$HOME/.local/share/model-boss"
+bash "$HOME/.local/share/model-boss/boss-dispatch/install.sh"
 mkdir -p "$HOME/.codex/agents"
 for role in reviewer implementer mechanic scout; do
-  install -m 0644 "$HOME/.agents/skills/model-boss/assets/agents/codex/$role.toml" \
+  install -m 0644 "$HOME/.codex/skills/boss-dispatch/assets/agents/codex/$role.toml" \
     "$HOME/.codex/agents/model-boss-$role.toml"
 done
 ```
@@ -247,10 +265,13 @@ done
 **PowerShell，项目级：**
 
 ```powershell
-$skill = ".agents\skills\model-boss"
+$repo = ".model-boss"
+$skill = ".codex\skills\boss-dispatch"
 $agents = ".codex\agents"
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/model-boss.git $skill
+git clone https://github.com/vincemakes/model-boss.git $repo
+if (Test-Path $skill) { Remove-Item -Recurse -Force $skill }
+New-Item -ItemType SymbolicLink -Path $skill -Target (Join-Path $repo "boss-dispatch") | Out-Null
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\codex\$role.toml") `
@@ -261,10 +282,14 @@ foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
 **PowerShell，用户级：**
 
 ```powershell
-$skill = Join-Path $HOME ".agents\skills\model-boss"
+$repo = Join-Path $HOME ".local\share\model-boss"
+$skill = Join-Path $HOME ".codex\skills\boss-dispatch"
 $agents = Join-Path $HOME ".codex\agents"
+New-Item -ItemType Directory -Force (Split-Path $repo -Parent) | Out-Null
+git clone https://github.com/vincemakes/model-boss.git $repo
 New-Item -ItemType Directory -Force (Split-Path $skill -Parent) | Out-Null
-git clone https://github.com/vincemakes/model-boss.git $skill
+if (Test-Path $skill) { Remove-Item -Recurse -Force $skill }
+New-Item -ItemType SymbolicLink -Path $skill -Target (Join-Path $repo "boss-dispatch") | Out-Null
 New-Item -ItemType Directory -Force $agents | Out-Null
 foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
   Copy-Item (Join-Path $skill "assets\agents\codex\$role.toml") `
@@ -274,7 +299,7 @@ foreach ($role in "reviewer", "implementer", "mechanic", "scout") {
 
 原生 Agent TOML 只是默认配置，不是安全边界。Max Reviewer 必须由运行时确认实际子
 进程的 fingerprint 与最终生效的只读权限。详情见
-[Codex 适配器](references/adapters/codex.md)。
+[Codex 适配器](boss-dispatch/references/adapters/codex.md)。
 
 ## Kimi 与 GLM 外部路由
 
@@ -390,7 +415,7 @@ Worker 会创建一次性 worktree、重新探测沙箱、执行声明的 gates�
 不接受调用者另传 approval 文件。
 
 精确 task 与 review context schema 见
-[外部 CLI 安全合同](references/adapters/external-cli.md)。不要在普通仓库里直接运行
+[外部 CLI 安全合同](boss-dispatch/references/adapters/external-cli.md)。不要在普通仓库里直接运行
 bypass alias；缺少 one-shot invocation manifest 时会安全拒绝。同一套 manifest 与
 命令合同可由 Claude Code 或 Codex 主循环驱动；模型与 Provider 名只是 route 数据，
 不是工作流分支。
@@ -425,7 +450,7 @@ Web 与 MCP 工具不可用。task 声明的 gate 命令使用直接参数数组
   `transport_error`、`review_revise`、`approval_stale`、`destination_changed` 与
   `sandbox_unavailable`。
 
-外部 CLI 细节见 [安全合同](references/adapters/external-cli.md)。
+外部 CLI 细节见 [安全合同](boss-dispatch/references/adapters/external-cli.md)。
 
 ## 参考基准快照
 
@@ -459,7 +484,7 @@ python3 <model-boss-skill-root>/scripts/model-boss.py setup-providers --legacy-s
 | 旧表面 | Model Boss 表面 |
 |---|---|
 | `https://github.com/vincemakes/token-saver` | `https://github.com/vincemakes/model-boss` |
-| `.claude/skills/token-saver`, `.agents/skills/token-saver` | `.claude/skills/model-boss`, `.agents/skills/model-boss` |
+| `.claude/skills/token-saver`, `.agents/skills/token-saver` | `.claude/skills/boss-dispatch`, `.agents/skills/boss-dispatch` |
 | `scripts/token-saver-route.py` | `scripts/model-boss.py` |
 | `runtime.token_saver` | `runtime.model_boss` |
 | `.token-saver.json` | `.model-boss.json` |

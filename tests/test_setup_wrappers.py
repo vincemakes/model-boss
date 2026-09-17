@@ -26,7 +26,7 @@ EXPECTED = {
     "claude-glm-turbo-bypass": ("glm-turbo", "sandboxed-worker"),
 }
 ROOT = Path(__file__).resolve().parents[1]
-SETUP_SCRIPT = ROOT / "scripts" / "setup-model-providers.sh"
+SETUP_SCRIPT = ROOT / "boss-dispatch" / "scripts" / "setup-model-providers.sh"
 
 
 class WrapperTests(unittest.TestCase):

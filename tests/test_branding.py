@@ -11,11 +11,11 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 
 CANONICAL_PATHS = (
-    "runtime/model_boss/__init__.py",
-    "scripts/model-boss.py",
-    "config/model-boss.example.json",
-    "config/model-boss.schema.json",
-    "dist/model-boss.skill",
+    "boss-dispatch/runtime/model_boss/__init__.py",
+    "boss-dispatch/scripts/model-boss.py",
+    "boss-dispatch/config/model-boss.example.json",
+    "boss-dispatch/config/model-boss.schema.json",
+    "dist/boss-dispatch.skill",
 )
 
 OBSOLETE_PATHS = (
@@ -24,6 +24,7 @@ OBSOLETE_PATHS = (
     "config/token-saver.example.json",
     "config/token-saver.schema.json",
     "dist/token-saver.skill",
+    "dist/model-boss.skill",
 )
 
 FULL_FILE_ALLOWLIST = {
@@ -41,13 +42,13 @@ MIGRATION_SECTIONS = {
 }
 
 LINE_ALLOWLIST = {
-    "SKILL.md": (
+    "boss-dispatch/SKILL.md": (
         r"^\s+.*migrat.*(?:token saver|fable-token-saver).*$",
     ),
-    "runtime/model_boss/cli.py": (
+    "boss-dispatch/runtime/model_boss/cli.py": (
         r'^\s*home / "\.claude" / "fable-token-saver" / "providers\.env"\s*$',
     ),
-    "runtime/model_boss/package.py": (
+    "boss-dispatch/runtime/model_boss/package.py": (
         r'^\s*if .*\.name (?:==|in) .*"(?:token-saver|fable-token-saver)\.skill".*$',
     ),
     "tests/test_setup_credentials.py": (r"^.*fable-token-saver.*$",),

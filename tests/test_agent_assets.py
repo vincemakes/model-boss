@@ -10,7 +10,8 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENTS = ROOT / "assets" / "agents"
+SKILL_ROOT = ROOT / "boss-dispatch"
+AGENTS = SKILL_ROOT / "assets" / "agents"
 ROLES = ("reviewer", "implementer", "mechanic", "scout")
 
 CLAUDE_MODELS = {
@@ -104,7 +105,7 @@ class AgentAssetTests(unittest.TestCase):
 
     def test_claude_assets_match_anthropic_profile_default_routes(self) -> None:
         profile = json.loads(
-            (ROOT / "references" / "profiles" / "anthropic.json").read_text(
+            (SKILL_ROOT / "references" / "profiles" / "anthropic.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -138,7 +139,7 @@ class AgentAssetTests(unittest.TestCase):
 
     def test_codex_assets_match_openai_profile_routes_and_preferences(self) -> None:
         profile = json.loads(
-            (ROOT / "references" / "profiles" / "openai.json").read_text(
+            (SKILL_ROOT / "references" / "profiles" / "openai.json").read_text(
                 encoding="utf-8"
             )
         )

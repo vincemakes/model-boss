@@ -4,11 +4,11 @@ Model Boss 是 Claude Code 与 Codex 共用的跨模型编程编排工作流。�
 
 ## 当前开发地图
 
-- 工作流协议：[`SKILL.md`](../SKILL.md)、[`references/protocol.md`](../references/protocol.md)、[`references/routing.md`](../references/routing.md)。
+- 工作流协议：[`SKILL.md`](../boss-dispatch/SKILL.md)、[`references/protocol.md`](../boss-dispatch/references/protocol.md)、[`references/routing.md`](../boss-dispatch/references/routing.md)。
 - 运行时：`runtime/model_boss/`；CLI 入口：`python3 scripts/model-boss.py`。
-- 配置：[`config/model-boss.example.json`](../config/model-boss.example.json) 与 [`config/model-boss.schema.json`](../config/model-boss.schema.json)；项目级文件为 `.model-boss.json`。
+- 配置：[`config/model-boss.example.json`](../boss-dispatch/config/model-boss.example.json) 与 [`config/model-boss.schema.json`](../boss-dispatch/config/model-boss.schema.json)；项目级文件为 `.model-boss.json`。
 - 用户级自动发现：POSIX 只在 `XDG_CONFIG_HOME` 是绝对路径时使用 `$XDG_CONFIG_HOME/model-boss/config.json` 与 `$XDG_CONFIG_HOME/model-boss/credentials.json`，否则使用 `$HOME/.config/model-boss/config.json` 与 `$HOME/.config/model-boss/credentials.json`。PowerShell 中，绝对的 `$env:XDG_CONFIG_HOME` 优先；否则运行时先读取绝对的 `$env:HOME`，只在 HOME 缺失时回退到绝对的 `$env:USERPROFILE`。文档中的 `$HOME\.config\model-boss\config.json` 与 `$HOME\.config\model-boss\credentials.json` 使用 PowerShell `$HOME` 便捷变量；被选中的根路径缺失或为相对路径时安全失败。
-- 打包命令：`bash scripts/package-skill.sh`；标准产物：`dist/model-boss.skill`。
+- 打包命令：`bash scripts/package-skill.sh`；标准产物：`dist/boss-dispatch.skill`。
 - 验证命令：`bash scripts/validate.sh` 与 `python3 -m unittest discover -s tests -v`。
 
 ## 2026-09 路由升级：精确版本、effort、算账
@@ -67,7 +67,7 @@ python3 scripts/model-boss.py setup-providers --legacy-source <absolute-old-prov
 | 旧表面 | Model Boss 表面 |
 |---|---|
 | `https://github.com/vincemakes/token-saver` | `https://github.com/vincemakes/model-boss` |
-| `.claude/skills/token-saver`, `.agents/skills/token-saver` | `.claude/skills/model-boss`, `.agents/skills/model-boss` |
+| `.claude/skills/token-saver`, `.agents/skills/token-saver` | `.claude/skills/boss-dispatch`, `.agents/skills/boss-dispatch` |
 | `scripts/token-saver-route.py` | `scripts/model-boss.py` |
 | `runtime.token_saver` | `runtime.model_boss` |
 | `.token-saver.json` | `.model-boss.json` |

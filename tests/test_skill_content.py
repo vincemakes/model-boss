@@ -8,7 +8,8 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "SKILL.md"
+SKILL_ROOT = ROOT / "boss-dispatch"
+SKILL = SKILL_ROOT / "SKILL.md"
 
 APPROVED_STATES = (
     "RESOLVE",
@@ -61,7 +62,7 @@ class SkillContentTests(unittest.TestCase):
         # Frontmatter is limited to the trigger pair plus the compatibility note;
         # no other keys are permitted.
         self.assertEqual(set(self.metadata), {"name", "description", "compatibility"})
-        self.assertEqual(self.metadata["name"], "model-boss")
+        self.assertEqual(self.metadata["name"], "boss-dispatch")
         description = self.metadata["description"]
         self.assertIsInstance(description, str)
         self.assertTrue(description.startswith("Use when"))
@@ -161,11 +162,11 @@ class SkillContentTests(unittest.TestCase):
             if not path_text:
                 continue
             with self.subTest(target=target):
-                self.assertTrue((ROOT / path_text).is_file())
+                self.assertTrue((SKILL_ROOT / path_text).is_file())
 
     def test_generated_openai_interface_is_narrow(self) -> None:
         metadata = yaml.safe_load(
-            (ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
+            (SKILL_ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
         )
         self.assertEqual(set(metadata), {"interface"})
         interface = metadata["interface"]
@@ -176,10 +177,10 @@ class SkillContentTests(unittest.TestCase):
         self.assertIn("$model-boss", interface["default_prompt"])
 
     def test_sealed_cli_documents_installed_root_and_max_plan_order(self) -> None:
-        external = (ROOT / "references" / "adapters" / "external-cli.md").read_text(
+        external = (SKILL_ROOT / "references" / "adapters" / "external-cli.md").read_text(
             encoding="utf-8"
         )
-        protocol = (ROOT / "references" / "protocol.md").read_text(encoding="utf-8")
+        protocol = (SKILL_ROOT / "references" / "protocol.md").read_text(encoding="utf-8")
         for label, text in (("skill", self.body), ("external", external)):
             with self.subTest(label=label):
                 self.assertNotIn("python3 scripts/model-boss.py", text)
@@ -216,8 +217,8 @@ class SkillContentTests(unittest.TestCase):
             self.body,
             (ROOT / "README.md").read_text(encoding="utf-8"),
             (ROOT / "README.zh-CN.md").read_text(encoding="utf-8"),
-            (ROOT / "references" / "protocol.md").read_text(encoding="utf-8"),
-            (ROOT / "references" / "adapters" / "external-cli.md").read_text(
+            (SKILL_ROOT / "references" / "protocol.md").read_text(encoding="utf-8"),
+            (SKILL_ROOT / "references" / "adapters" / "external-cli.md").read_text(
                 encoding="utf-8"
             ),
         )

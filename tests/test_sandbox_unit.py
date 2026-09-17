@@ -28,7 +28,7 @@ from runtime.model_boss.sandbox import (
 
 class RuntimeIdentityTests(unittest.TestCase):
     def test_active_security_domains_use_model_boss_identity(self) -> None:
-        runtime_root = Path(__file__).resolve().parents[1] / "runtime" / "model_boss"
+        runtime_root = Path(__file__).resolve().parents[1] / "boss-dispatch" / "runtime" / "model_boss"
         legacy_domain = "TOKEN" + "-SAVER"
         for name in ("evidence.py", "integration.py", "models.py", "sandbox.py"):
             with self.subTest(name=name):

@@ -13,7 +13,7 @@ from runtime.model_boss.setup import SetupError, migrate_legacy_credentials, par
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "model-boss.py"
+SCRIPT = ROOT / "boss-dispatch" / "scripts" / "model-boss.py"
 
 
 class LegacyParserTests(unittest.TestCase):

@@ -32,7 +32,7 @@ from runtime.model_boss.transport import ReviewerTransportResult, ReviewerVerdic
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "model-boss.py"
+SCRIPT = ROOT / "boss-dispatch" / "scripts" / "model-boss.py"
 COMMANDS = (
     "resolve",
     "match-models",
@@ -422,7 +422,7 @@ class CliTests(unittest.TestCase):
     def test_validate_config_prints_one_versioned_json_object(self) -> None:
         result = self._run(
             "validate-config",
-            str(ROOT / "config" / "model-boss.example.json"),
+            str(ROOT / "boss-dispatch" / "config" / "model-boss.example.json"),
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         value = json.loads(result.stdout)

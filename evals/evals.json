@@ -1,5 +1,5 @@
 {
-  "skill_name": "model-boss",
+  "skill_name": "boss-dispatch",
   "note": "The four benchmark evals each contain one historical predecessor skill observation and one baseline observation from independent headless `claude -p` sessions in fresh fixture copies; they were not rerun for Model Boss. See the benchmark reports for methodology and results. The final two evals cover current rename discovery only.",
   "evals": [
     {

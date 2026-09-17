@@ -15,7 +15,10 @@ from pathlib import Path
 from typing import Sequence
 
 
-PACKAGE_ROOT = "model-boss"
+# Archive root directory name for the packaged skill.
+PACKAGE_ROOT = "boss-dispatch"
+# Repository directory that holds the skill sources (SKILL.md, references/, ...).
+SKILL_ROOT = "boss-dispatch"
 PACKAGE_MANIFEST = (
     "SKILL.md",
     "agents/openai.yaml",
@@ -76,6 +79,20 @@ EXECUTABLE_PATHS = frozenset(
         "scripts/validate.sh",
     }
 )
+# Manifest entries that stay at the repository root: the published documentation
+# and the repository build tooling. Every other entry lives inside SKILL_ROOT.
+REPOSITORY_SOURCE_PATHS = frozenset(
+    {
+        "README.md",
+        "README.zh-CN.md",
+        "BENCHMARKS.md",
+        "BENCHMARKS.zh-CN.md",
+        "LICENSE",
+        "scripts/package-skill.sh",
+        "scripts/validate.sh",
+    }
+)
+# Skill-relative directories whose contents must be fully listed in the manifest.
 _CONTROLLED_PREFIXES = (
     "agents",
     "assets/agents",
@@ -84,6 +101,8 @@ _CONTROLLED_PREFIXES = (
     "runtime/model_boss",
     "scripts",
 )
+# Repository-root directories whose contents must be fully listed in the manifest.
+_REPOSITORY_CONTROLLED_PREFIXES = ("scripts",)
 _LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 _SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.IGNORECASE)
 
@@ -104,35 +123,53 @@ def _ordered_manifest() -> tuple[str, ...]:
     return tuple(sorted(PACKAGE_MANIFEST, key=lambda value: value.encode("utf-8")))
 
 
+def source_path(repo_root: Path, relative: str) -> Path:
+    """Resolve a manifest entry to the file that ships for it."""
+    if relative in REPOSITORY_SOURCE_PATHS:
+        return repo_root / relative
+    return repo_root / SKILL_ROOT / relative
+
+
 def _is_cache_path(relative: Path) -> bool:
     return "__pycache__" in relative.parts or relative.suffix in {".pyc", ".pyo"}
 
 
+def _check_controlled_tree(base: Path, prefix: str, expected: set[str]) -> None:
+    if not base.exists():
+        return
+    prefix_path = Path(prefix) if prefix else Path()
+
+    def _manifest_path(candidate: Path) -> Path:
+        return prefix_path / candidate.relative_to(base)
+
+    for directory, directory_names, filenames in os.walk(base, followlinks=False):
+        directory_path = Path(directory)
+        for name in tuple(directory_names):
+            candidate = directory_path / name
+            relative = _manifest_path(candidate)
+            if candidate.is_symlink():
+                raise PackageError(f"unlisted symlink in packaged area: {relative.as_posix()}")
+            if _is_cache_path(relative):
+                directory_names.remove(name)
+        for name in filenames:
+            candidate = directory_path / name
+            relative_path = _manifest_path(candidate)
+            if _is_cache_path(relative_path):
+                continue
+            relative = relative_path.as_posix()
+            if candidate.is_symlink():
+                raise PackageError(f"unlisted symlink in packaged area: {relative}")
+            if relative not in expected:
+                raise PackageError(f"unlisted file in packaged area: {relative}")
+
+
 def _validate_controlled_tree(root: Path) -> None:
     expected = set(PACKAGE_MANIFEST)
+    skill_root = root / SKILL_ROOT
     for prefix_text in _CONTROLLED_PREFIXES:
-        prefix = root / prefix_text
-        if not prefix.exists():
-            continue
-        for directory, directory_names, filenames in os.walk(prefix, followlinks=False):
-            directory_path = Path(directory)
-            for name in tuple(directory_names):
-                candidate = directory_path / name
-                relative = candidate.relative_to(root)
-                if candidate.is_symlink():
-                    raise PackageError(f"unlisted symlink in packaged area: {relative.as_posix()}")
-                if _is_cache_path(relative):
-                    directory_names.remove(name)
-            for name in filenames:
-                candidate = directory_path / name
-                relative_path = candidate.relative_to(root)
-                if _is_cache_path(relative_path):
-                    continue
-                relative = relative_path.as_posix()
-                if candidate.is_symlink():
-                    raise PackageError(f"unlisted symlink in packaged area: {relative}")
-                if relative not in expected:
-                    raise PackageError(f"unlisted file in packaged area: {relative}")
+        _check_controlled_tree(skill_root / prefix_text, prefix_text, expected)
+    for prefix_text in _REPOSITORY_CONTROLLED_PREFIXES:
+        _check_controlled_tree(root / prefix_text, prefix_text, expected)
 
 
 def _validate_skill_frontmatter(payload: bytes) -> None:
@@ -144,8 +181,8 @@ def _validate_skill_frontmatter(payload: bytes) -> None:
     if match is None:
         raise PackageError("SKILL.md frontmatter is missing")
     frontmatter = match.group(1)
-    if re.search(r"(?m)^name:\s*model-boss\s*$", frontmatter) is None:
-        raise PackageError("SKILL.md must use the model-boss name")
+    if re.search(r"(?m)^name:\s*boss-dispatch\s*$", frontmatter) is None:
+        raise PackageError("SKILL.md must use the boss-dispatch name")
     description_match = re.search(
         r"(?ms)^description:\s*>-\s*\n((?:[ \t]+.*(?:\n|\Z))+)",
         frontmatter,
@@ -169,6 +206,12 @@ def _link_resolves(target: str, manifest: set[str]) -> bool:
     if path.is_absolute() or ".." in path.parts or "\\" in raw:
         return False
     normalized = path.as_posix().rstrip("/")
+    # README links point at the skill sources through their repository path
+    # (boss-dispatch/...); strip that prefix before matching the manifest.
+    if normalized == SKILL_ROOT:
+        normalized = ""
+    elif normalized.startswith(SKILL_ROOT + "/"):
+        normalized = normalized[len(SKILL_ROOT) + 1 :]
     # media/ holds repository documentation material (the social card) that is
     # rendered from the source tree and deliberately excluded from the packaged
     # bundle; README references to it resolve against the repo, not the manifest.
@@ -200,7 +243,7 @@ def _validate_sources(repo_root: str | os.PathLike[str]) -> tuple[Path, dict[str
     _validate_controlled_tree(root)
     payloads: dict[str, bytes] = {}
     for relative in PACKAGE_MANIFEST:
-        path = root / relative
+        path = source_path(root, relative)
         try:
             lexical = os.lstat(path)
             resolved = path.resolve(strict=True)

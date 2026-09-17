@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SKILL_ROOT = ROOT / "boss-dispatch"
 
 EN_HEADINGS = (
     "Model Boss",
@@ -100,7 +101,7 @@ class DocumentationTests(unittest.TestCase):
             / "plans"
             / "2026-07-22-model-boss-rename.md"
         ).read_text(encoding="utf-8")
-        cls.schema_path = ROOT / "config" / "model-boss.schema.json"
+        cls.schema_path = ROOT / "boss-dispatch" / "config" / "model-boss.schema.json"
         cls.schema = (
             json.loads(cls.schema_path.read_text(encoding="utf-8"))
             if cls.schema_path.is_file()
@@ -410,12 +411,12 @@ class DocumentationTests(unittest.TestCase):
 
     def test_exact_install_destinations_cover_both_hosts_and_shells(self) -> None:
         required = (
-            ".claude/skills/model-boss",
+            ".claude/skills/boss-dispatch",
             ".claude/agents",
-            ".agents/skills/model-boss",
+            ".codex/skills/boss-dispatch",
             ".codex/agents",
-            "$HOME/.claude/skills/model-boss",
-            "$HOME/.agents/skills/model-boss",
+            "$HOME/.claude/skills/boss-dispatch",
+            "$HOME/.codex/skills/boss-dispatch",
             "$HOME/.codex/agents",
             "powershell",
         )
@@ -502,11 +503,11 @@ class DocumentationTests(unittest.TestCase):
         active_paths = (
             ROOT / "README.md",
             ROOT / "README.zh-CN.md",
-            ROOT / "SKILL.md",
-            ROOT / "references" / "protocol.md",
-            ROOT / "references" / "adapters" / "claude-code.md",
-            ROOT / "references" / "adapters" / "codex.md",
-            ROOT / "references" / "adapters" / "external-cli.md",
+            SKILL_ROOT / "SKILL.md",
+            SKILL_ROOT / "references" / "protocol.md",
+            SKILL_ROOT / "references" / "adapters" / "claude-code.md",
+            SKILL_ROOT / "references" / "adapters" / "codex.md",
+            SKILL_ROOT / "references" / "adapters" / "external-cli.md",
         )
         for path in active_paths:
             with self.subTest(path=path.relative_to(ROOT).as_posix()):

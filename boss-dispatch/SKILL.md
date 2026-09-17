@@ -1,5 +1,5 @@
 ---
-name: model-boss
+name: boss-dispatch
 description: >-
   Use when users ask to reduce high-tier model tokens or quota, invoke Model Boss Lite or Max, delegate implementation while retaining planning or review authority, configure Claude Code or Codex worker/reviewer routes, dispatch Kimi or GLM, or use trigger phrases model boss, save model tokens, 省token, 分层干活, 用kimi开发你审核, and 让便宜模型写;
   migrate from Token Saver or fable-token-saver.
