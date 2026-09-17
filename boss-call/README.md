@@ -1,67 +1,116 @@
-# boss-call — one Boss, several members, one line each
+# boss-call
 
-Model Boss dispatches a bounded task packet to a worker and audits the
-evidence. `boss-call` is a smaller, separate thing: a persistent mailbox so a
-Boss session can follow several independent terminal sessions it cannot type
-into, and they can report or ask without spending the Boss's tokens on chatter.
+One Boss, several agent sessions, one line each.
 
-The relationship is a star and the CLI enforces it: a room has exactly one
-Boss; a member's `post` goes to the Boss and nowhere else; the Boss posts to
-one member or to all. Any agent that can run a shell command can be either
-side — Claude Code, Codex, kiso, a script.
+Agent sessions cannot type into each other's terminals. boss-call gives them a
+mailbox: a Boss session and N member sessions, each member on a single line to
+the Boss. It is a kiso extension, a Claude Code skill and a Codex skill at the
+same time, and a small CLI any harness can call. State is plain files under
+`~/.boss-call/<room>/`. No server, no daemon, no dependencies.
 
-```
-boss-call/
-  boss-call.py    the CLI (Python 3.11+, stdlib only)         -> ~/.local/bin/boss-call
-  boss-call.mjs   the kiso extension: boss_read / boss_post   -> ~/.kiso/extensions/
-  SKILL.md        one skill, installed to ~/.kiso, ~/.claude and ~/.codex skills dirs
-  install.sh
-```
-
-State: `~/.model-boss/boss-call/<room>/` — `room.json` (boss, members with
-repo roots, the kiso launcher), `messages.jsonl` (append-only, seq),
-`cursors/<name>` (what each participant has acknowledged).
-
-## Zero-config on the member side
-
-Identity and room come from the cwd: a registered member root contains it.
-So inside a member repo, `boss-call who` needs no flags, and — with the kiso
-extension installed — a plain `kiso` (or your own wrapper) started there IS
-the member session: the extension appends who-you-are to the system prompt
-and adds `boss_read` / `boss_post` as tools. No environment variable, no
-opening line. Outside a member repo the extension is empty and costs nothing.
+## Install
 
 ```bash
-boss-call/install.sh
-boss-call --room migration init --boss boss --launcher kiso-co-bypass \
-    --member flowpix2=~/Desktop/devv/flowpix2 --member uooki=~/Desktop/devv/uooki \
-    --member reelfo=~/Desktop/devv/reelfo
-
-cd ~/Desktop/devv/reelfo && kiso-co-bypass       # a member session, that is all
-boss-call serve                                  # or: unattended, in that repo
-boss-call post --me boss --to reelfo "…"         # the Boss
-boss-call peek-session latest --match reelfo     # the Boss reads a kiso log directly
+npm i -g @vincemakes/boss-call && boss-call setup
 ```
 
-## Unattended: `serve`
+`setup` links the skill into every harness present on the machine (`~/.kiso`,
+`~/.claude`, `~/.codex`) and the extension into `~/.kiso/extensions`. Run it
+again after an upgrade. Needs Node 22+, which every one of those harnesses
+already requires.
 
-An interactive session reads its inbox at the start of its next turn, so
-somebody has to give it a turn. `boss-call serve` is that somebody: it waits
-for mail, hands each batch to the room's launcher as
-`<launcher> resume <session> "<mail>"` (stdin closed, `KISO_MODE=bypass` —
-the shape kiso's own subagent extension uses), acknowledges the mail only
-after the run exits (a crashed run re-delivers), and when the model posted no
-status, posts one from the durable log tagged `[auto]`. With the Boss on a
-periodic wakeup (`/loop 15m boss-call read --me boss --ack`) neither side
-needs a person.
+To have an AI do it, paste this to it:
 
-kiso parses flags AFTER the positional arguments: `kiso resume <id> "<prompt>"
---model co --mode bypass` works, flags before `resume` swallow the prompt. A
-launcher wrapper must therefore append its own flags after `"$@"`.
+> Install boss-call: `npm i -g @vincemakes/boss-call && boss-call setup`.
+> Then run `boss-call join <room> --as <name>` inside my repo and confirm with
+> `boss-call who`.
 
-A message is never an authorization — money, pushes, merges and deploys stay
-with the person at the terminal; a headless run that needs one posts an `ask`
-and stops.
+## Use
 
-Not part of the packaged Model Boss skill (`scripts/package-skill.sh` does
-not ship it).
+The boss, anywhere:
+
+```bash
+boss-call host migration
+```
+
+Each member, inside its own repo (the directory becomes its identity):
+
+```bash
+cd ~/work/reelfo && boss-call join migration --as reelfo
+```
+
+From then on nothing needs a flag. A `kiso` started in that directory is the
+member session: it is told who it is, gets `boss_read` / `boss_post`, and reads
+its mail at the start of every turn. A Claude Code or Codex session in that
+directory has the skill and uses the CLI:
+
+```bash
+boss-call read --ack
+boss-call post --kind status "done: …; not done: …; blocked: …"
+```
+
+The Boss:
+
+```bash
+boss-call status
+boss-call post --to reelfo "wire main.ts openSession to buildReelfoAgent first"
+boss-call read --ack
+boss-call peek-session latest --match "reelfo"
+```
+
+## Unattended
+
+Nothing wakes a session by itself; mail is seen when a turn starts. To let a
+session be driven by mail alone, run it under `serve`:
+
+```bash
+cd ~/work/reelfo && boss-call serve
+```
+
+`serve` polls, hands each batch of mail to `kiso resume` as one headless turn
+in bypass mode, acknowledges the mail only after the run exits (a crash
+re-delivers it), and if the model posted nothing, posts a status from the
+session log tagged `[auto]`. The Boss can be served too, so a fully automatic
+loop of agents is possible.
+
+Where the model comes from:
+
+```bash
+boss-call join migration --as reelfo --profile co --env-file ~/.config/kiso/creds.env
+```
+
+`--profile` is the kiso model profile passed as `--model`; `--env-file` is a
+`KEY=VALUE` file exported into the kiso process (API keys). Both may also be
+given to `host` for a room-wide default, or to `serve` for one run.
+
+Useful flags: `--once` (one batch, then exit), `--session <id>` (resume an
+existing kiso session instead of `boss-call-<room>-<name>`), `--poll 10`.
+
+## The two rules
+
+Mail is never a person's authorization. Money, pushes, merges, deploys, and
+production config stay with the person at that terminal; a member asks them and
+says so in its status.
+
+Delivery is per turn. A session sees mail when its next turn starts. A person
+at the boss's keyboard reads member terminals directly and needs no more than
+`boss-call status`.
+
+## Layout
+
+```
+~/.boss-call/<room>/room.json       boss, members (name → repo root), kiso defaults
+~/.boss-call/<room>/messages.jsonl  {seq, ts, from, to, kind, text, ref?} append-only
+~/.boss-call/<room>/cursors/<name>  last seq acknowledged by that participant
+```
+
+Kinds: `msg`, `ask`, `reply`, `status`. A member's post goes to the boss and
+nowhere else; the boss must name `--to <member>` or `--to all`.
+
+## Develop
+
+```bash
+npm test          # node:test, no dependencies
+```
+
+Part of [model-boss](https://github.com/vincemakes/model-boss).

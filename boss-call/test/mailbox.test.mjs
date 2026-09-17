@@ -1,0 +1,88 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+
+process.env.BOSS_CALL_HOME = mkdtempSync(join(tmpdir(), "boss-call-"));
+delete process.env.BOSS_CALL_ROOM;
+delete process.env.BOSS_CALL_ME;
+const M = await import("../src/mailbox.mjs");
+
+const repos = mkdtempSync(join(tmpdir(), "repos-"));
+const A = join(repos, "a");
+const B = join(repos, "b");
+mkdirSync(join(A, "deep", "er"), { recursive: true });
+mkdirSync(B);
+
+test("host then join; the star is enforced on post", () => {
+	M.host("r1", "boss");
+	M.joinRoom("r1", "a", A);
+	M.joinRoom("r1", "b", B);
+
+	assert.throws(() => M.post("r1", { from: "boss", text: "hi" }), /--to/);
+	const m0 = M.post("r1", { from: "boss", to: "all", text: "hello all" });
+	assert.equal(m0.seq, 0);
+	assert.throws(() => M.post("r1", { from: "a", to: "b", text: "psst" }), /talks only to the boss/);
+	const m1 = M.post("r1", { from: "a", text: "done", kind: "status" });
+	assert.deepEqual([m1.seq, m1.to], [1, "boss"]);
+	assert.throws(() => M.post("r1", { from: "boss", to: "zed", text: "x" }), /not a member/);
+	assert.throws(() => M.post("r1", { from: "a", text: "x", kind: "poke" }), /kind must be/);
+	assert.throws(() => M.joinRoom("nope", "x", A), /no boss yet/);
+});
+
+test("unread is per recipient and per cursor; ack moves the cursor to the end", () => {
+	assert.deepEqual(M.unread("r1", "b").map((m) => m.seq), [0]);
+	assert.deepEqual(M.unread("r1", "boss").map((m) => m.seq), [1]);
+	assert.deepEqual(M.unread("r1", "a").map((m) => m.seq), [0]); // own status not returned
+	assert.equal(M.ack("r1", "b"), 1);
+	assert.deepEqual(M.unread("r1", "b"), []);
+	M.post("r1", { from: "boss", to: "b", text: "just you", kind: "msg" });
+	assert.deepEqual(M.unread("r1", "b").map((m) => m.seq), [2]);
+	assert.deepEqual(M.unread("r1", "a").map((m) => m.seq), [0]);
+});
+
+test("identity comes from the cwd, deepest root wins, and the room from the cwd too", () => {
+	assert.deepEqual(M.identify("r1", undefined, join(A, "deep", "er")), { name: "a", role: "member" });
+	assert.deepEqual(M.identify("r1", undefined, B), { name: "b", role: "member" });
+	assert.throws(() => M.identify("r1", undefined, repos), /cannot tell who you are/);
+	assert.deepEqual(M.identify("r1", "boss"), { name: "boss", role: "boss" });
+	assert.throws(() => M.identify("r1", "ghost"), /not in room/);
+	assert.equal(M.resolveRoom(undefined, join(A, "deep")), "r1");
+
+	M.host("r2", "chief", { root: join(A, "deep") });
+	assert.equal(M.resolveRoom(undefined, join(A, "deep", "er")), "r2"); // deeper root wins across rooms
+	assert.equal(M.resolveRoom(undefined, A), "r1");
+	assert.deepEqual(M.identify("r2", undefined, join(A, "deep")), { name: "chief", role: "boss" });
+	assert.throws(() => M.resolveRoom(undefined, tmpdir()), /which room/);
+});
+
+test("status counts unread and asks per participant", () => {
+	M.post("r1", { from: "a", text: "which db?", kind: "ask" });
+	const s = M.status("r1");
+	const boss = s.rows.find((r) => r.name === "boss");
+	assert.equal(boss.role, "boss");
+	assert.equal(boss.asks, 1);
+	assert.equal(boss.unread, 2);
+});
+
+test("a torn last line in messages.jsonl is skipped, not guessed", async () => {
+	const { appendFileSync } = await import("node:fs");
+	appendFileSync(join(process.env.BOSS_CALL_HOME, "r1", "messages.jsonl"), '{"seq":99,"ts":"x","fr');
+	const before = M.readMessages("r1").length;
+	const m = M.post("r1", { from: "boss", to: "a", text: "after the tear" });
+	assert.equal(m.seq, before); // seq continues from the last GOOD line
+});
+
+test("posting under contention keeps seq unique", async () => {
+	const { execFileSync } = await import("node:child_process");
+	const script = `import("${new URL("../src/mailbox.mjs", import.meta.url).pathname}").then(M => { for (let i = 0; i < 20; i++) M.post("r1", { from: "boss", to: "all", text: "c" + process.argv[1] + "-" + i }); })`;
+	const before = M.readMessages("r1").length;
+	await Promise.all([1, 2, 3].map((n) => new Promise((res, rej) => {
+		import("node:child_process").then(({ execFile }) => execFile(process.execPath, ["--input-type=module", "-e", script, String(n)], { env: process.env }, (err) => (err ? rej(err) : res())));
+	})));
+	const seqs = M.readMessages("r1").map((m) => m.seq);
+	assert.equal(seqs.length, before + 60);
+	assert.equal(new Set(seqs).size, seqs.length);
+	void execFileSync;
+});
