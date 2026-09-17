@@ -18,7 +18,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { ack, formatMessage, identify, loadRoom, post, readMessages, unread } from "./mailbox.mjs";
-import { loadSession, pickSession, summarize } from "./peek.mjs";
+import { loadSession, pickSession, sessionsDir, summarize } from "./peek.mjs";
+import { join } from "node:path";
 
 export function kisoArgv({ bin = "kiso", session, prompt, profile, mode = "bypass" }) {
 	const argv = [bin, "resume", session, prompt];
@@ -70,6 +71,12 @@ export function bossPrompt(msgs, me) {
 	].join("\n");
 }
 
+/** How many events the session log holds now; 0 when there is no log yet. */
+function logSize(session) {
+	const p = join(sessionsDir(), `${session}.jsonl`);
+	return existsSync(p) ? loadSession(p).length : 0;
+}
+
 function sessionSummary(session, lines) {
 	try {
 		const f = pickSession(session, null);
@@ -111,8 +118,18 @@ export function serve({ room, me: explicit, cwd, session, bin, profile, mode, en
 		const prompt = role === "boss" ? bossPrompt(batch, me) : memberPrompt(batch, me);
 		const argv = kisoArgv({ ...argvBase, session: sid, prompt });
 		log(`[serve] ${batch.length} new message(s) (#${batch[0].seq}..#${batch.at(-1).seq}) -> ${argv[0]} resume ${sid}`);
+		const before = logSize(sid);
 		const r = spawn(argv[0], argv.slice(1), { cwd: root, env, stdio: ["ignore", "inherit", "inherit"] });
 		exit = r.status ?? 1;
+		if (exit !== 0 && logSize(sid) === before) {
+			// The run never started (the session is open in another kiso, or
+			// kiso itself failed to launch). The mail stays unread: nothing
+			// has seen it, so nothing may acknowledge it.
+			log(`[serve] run did not start (exit ${exit}, session log unchanged) — is ${sid} open in another kiso? mail #${batch[0].seq}..#${batch.at(-1).seq} kept unread; retrying in ${poll}s`);
+			if (once) return exit;
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, poll * 1000);
+			continue;
+		}
 		ack(room, me);
 		const posted = readMessages(room).some((m) => m.seq > lastSeq && m.from === me);
 		if (!posted) {

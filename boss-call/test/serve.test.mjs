@@ -92,9 +92,24 @@ test("serve --once with nothing unread returns 0 without spawning", () => {
 	assert.equal(spawned, 0);
 });
 
-test("a crashed run (non-zero exit) still acks and reports the exit code", () => {
+test("a run that never started (session locked, log unchanged) keeps the mail unread", () => {
 	M.post("w", { from: "boss", to: "worker", text: "again" });
-	const exit = S.serve({ room: "w", me: "worker", once: true, log: () => {}, spawn: () => ({ status: 3 }) });
+	const before = M.readMessages("w").length;
+	const logs = [];
+	const exit = S.serve({ room: "w", me: "worker", once: true, log: (l) => logs.push(l), spawn: () => ({ status: 1 }) });
+	assert.equal(exit, 1);
+	assert.equal(M.readMessages("w").length, before); // no auto status either
+	assert.ok(M.unread("w", "worker").some((m) => m.text === "again"));
+	assert.match(logs.join("\n"), /run did not start .*open in another kiso/);
+});
+
+test("a run that started and then crashed (log grew) still acks and reports the exit code", () => {
+	const spawn = (bin, args) => {
+		const p = join(process.env.KISO_HOME, "sessions", `${args[1]}.jsonl`);
+		writeFileSync(p, JSON.stringify({ runId: "r9", event: { type: "user_input", content: args[2] } }) + "\n", { flag: "a" });
+		return { status: 3 };
+	};
+	const exit = S.serve({ room: "w", me: "worker", once: true, log: () => {}, spawn });
 	assert.equal(exit, 3);
 	assert.match(M.readMessages("w").at(-1).text, /run exited 3/);
 	assert.deepEqual(M.unread("w", "worker"), []);
