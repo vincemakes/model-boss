@@ -29,6 +29,22 @@ function locate(cwd) {
 	}
 }
 
+/**
+ * Approval policy. The three mail tools are always allowed. A `shell` call
+ * that runs `boss-call wait` is DENIED with a reason: seen live, a model with a
+ * long history of CLI use keeps typing `boss-call wait --timeout 20` even
+ * when boss_wait is right there, gets an empty return at the shell tool's
+ * limit, and ends its turn. A deny is a tool result the model must react to,
+ * and the reason names the tool to call instead. Everything else abstains.
+ */
+export function decideCall(call) {
+	if (["boss_read", "boss_post", "boss_wait"].includes(call.name)) return { action: "allow" };
+	if (call.name === "shell" && /\bboss-call\s+wait\b/.test(String(call.input?.command ?? ""))) {
+		return { action: "deny", reason: "In this session, waiting is the boss_wait tool: in-process, no shell timeout, returns only with mail. Call boss_wait now instead of `boss-call wait`." };
+	}
+	return { action: "abstain" };
+}
+
 export default function bossCall() {
 	const me = locate(resolve(process.cwd()));
 	if (!me) return { name: "boss-call" };
@@ -109,6 +125,6 @@ export default function bossCall() {
 				},
 			},
 		],
-		approvals: [{ decide: (call) => (["boss_read", "boss_post", "boss_wait"].includes(call.name) ? { action: "allow" } : { action: "ask" }) }],
+		approvals: [{ decide: decideCall }],
 	};
 }

@@ -10,7 +10,7 @@
  * Used by the CLI, by the kiso extension (in-process) and by `serve`.
  * No dependencies.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -105,10 +105,22 @@ export function setCursor(room, name, seq) {
 // identity
 // ---------------------------------------------------------------------------
 
+/** A path with symlinks resolved, so /var/... and /private/var/... (macOS),
+ *  or a repo reached through a linked directory, compare equal. */
+export function realDir(p) {
+	const r = resolve(String(p).replace(/^~(?=\/|$)/, homedir()));
+	try {
+		return realpathSync.native(r);
+	} catch {
+		return r;
+	}
+}
+
 function rootContains(root, here) {
 	if (!root) return -1;
-	const r = resolve(root.replace(/^~(?=\/|$)/, homedir()));
-	return here === r || here.startsWith(r + "/") ? r.length : -1;
+	const r = realDir(root);
+	const h = realDir(here);
+	return h === r || h.startsWith(r + "/") ? r.length : -1;
 }
 
 /** The room the cwd belongs to: --room, $BOSS_CALL_ROOM, the room whose
