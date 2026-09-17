@@ -7,7 +7,7 @@
  *   boss-call join <room> --as <name>    join a room as a member; the current directory is your repo
  *   boss-call who                        which side you are on
  *   boss-call read [--ack]               unread mail for you
- *   boss-call wait [--timeout 110]       block until mail arrives (acknowledged), then print it
+ *   boss-call wait [--timeout 25]        block until mail arrives (acknowledged), then print it
  *   boss-call post [--kind K] "text"     a member: to the boss; the boss: --to <member>|all
  *   boss-call status | tail [-n N]       the room at a glance
  *   boss-call serve [--once]             run unattended: mail -> one kiso turn -> status
@@ -153,10 +153,10 @@ function main(argv) {
 		}
 		case "wait": {
 			const { name } = identify(room, flags.me, flags.cwd);
-			const timeout = Number.parseInt(flags.timeout ?? "110", 10);
+			const timeout = Number.parseInt(flags.timeout ?? "25", 10); // under every harness's shell-tool timeout (kiso: 30s)
 			const msgs = waitForMail(room, name, { timeoutMs: timeout * 1000, all: Boolean(flags.all) });
 			if (!msgs.length) {
-				console.log(`(no mail for ${name} in ${timeout}s — run \`boss-call wait\` again to keep listening)`);
+				console.log(`(no mail for ${name} in ${timeout}s — run \`boss-call wait\` again to keep listening; --timeout N waits longer if your shell tool allows)`);
 				return 0;
 			}
 			for (const m of msgs) console.log(formatMessage(m));

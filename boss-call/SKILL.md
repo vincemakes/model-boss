@@ -27,7 +27,9 @@ boss-call wait
 ```
 
 It blocks until mail for you arrives, prints it acknowledged, and returns.
-On timeout it prints nothing new; run it again. **Do not end your turn to
+On timeout (25s by default, under every harness's shell-tool limit) it prints
+nothing new; run it again. If your shell tool allows longer calls, pass
+`--timeout 110` and raise the tool's own limit to match. **Do not end your turn to
 wait; waiting is `boss-call wait`.** The person at this terminal can still
 type; if they do, their instruction wins.
 

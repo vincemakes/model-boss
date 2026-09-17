@@ -76,7 +76,8 @@ No scheduler, no daemon, no harness feature. A session that has nothing to do
 runs `boss-call wait`, which blocks until mail for it arrives and then prints
 it. Every harness has a shell tool and a blocking tool call, so this works
 the same in Claude Code, Codex, pi, opencode and kiso. While it waits it
-spends no tokens; on timeout it runs `wait` again. The person keeps the
+spends no tokens; on timeout (25s, under every shell tool's limit) it runs
+`wait` again. The person keeps the
 keyboard: they watch their normal TUI and can type over it at any time.
 
 The Boss does the same: answer mail, direct, `boss-call wait`. `boss-call

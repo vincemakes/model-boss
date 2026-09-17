@@ -243,7 +243,7 @@ export function readHeartbeat(room, name) {
 
 /** Block until mail for `me` arrives or `timeoutMs` passes. Returns the mail
  *  (acknowledged) or [] on timeout. Polls the file; cheap and portable. */
-export function waitForMail(room, me, { timeoutMs = 110_000, pollMs = 1000, all = false } = {}) {
+export function waitForMail(room, me, { timeoutMs = 25_000, pollMs = 1000, all = false } = {}) {
 	const deadline = Date.now() + timeoutMs;
 	for (;;) {
 		heartbeat(room, me, "waiting");
