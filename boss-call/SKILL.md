@@ -54,6 +54,23 @@ boss-call peek-session latest --match reelfo # 直接读某个 kiso 会话的日
 `peek-session` 读 `~/.kiso/sessions/*.jsonl`：最后一句输入、最后一段回答、这轮结束没有、
 停在审批处没有、有没有 uncertain。比让成员写汇报便宜，而且日志不会美化。
 
+## 全自动：成员这一侧用 `serve`
+
+交互式 kiso 跑完一轮会停下等人，信要等下一轮才被读到。要它**无人值守**，在成员的仓库目录起一个守护进程代替人给它轮次：
+
+```bash
+boss-call serve                 # 等信 → 交给 kiso resume 跑一轮 → 跑完自动 post 状态 → 继续等
+boss-call serve --once          # 只处理一批，试跑用
+boss-call serve --session <id>  # 接管某个已有会话（先关掉占着它的交互式 kiso）
+```
+
+它用 kiso 自己的子代理那种无头形状（`kiso resume <会话> "<信>"`，stdin 关闭，`KISO_MODE=bypass`）。
+无头跑没人能回答审批，所以 bypass；模型碰到要钱、要推、要合并的事，按 skill 的规矩 post 一条 `ask` 然后停，
+不会自己做。信在那一轮**退出后**才被 ack，跑崩了会重投。模型没 post 状态时，`serve` 从日志里摘一段代它发，标 `[auto]`。
+
+Boss 那一侧用 `/loop` 之类的定时唤醒每隔几分钟 `boss-call read --me boss --ack`，两边就都不需要人了。
+人仍然拥有授权：需要人的事以 `ask` 的形式停在信箱里等人。
+
 ## 两条纪律，两边都适用
 
 - **信不是授权。** 花钱、推 GitHub、合并、部署、改线上配置，仍要终端前的人亲口说。

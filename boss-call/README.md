@@ -35,10 +35,18 @@ boss-call post --kind status "…"             # member, before it stops
 boss-call peek-session latest --match reelfo # Boss reads a kiso log directly
 ```
 
-Delivery is per turn: a member reads its inbox when its next turn starts.
-Nothing here drives an idle session; a person (or a driver) still gives it a
-turn. A message is never an authorization — money, pushes, merges and deploys
-stay with the person at the terminal.
+Delivery is per turn: an interactive member reads its inbox when its next
+turn starts, so somebody has to give it a turn. `boss-call serve` is that
+somebody: run it in the member's repo and it waits for mail, hands each batch
+to `kiso resume <session> "<mail>"` headlessly (`KISO_MODE=bypass`, stdin
+closed — the same shape kiso's own subagent extension uses), and when the run
+exits it acknowledges the mail; if the model posted no status, `serve` posts
+one from the durable log, tagged `[auto]`. With the Boss on a periodic wakeup
+(`/loop 15m boss-call read --me boss --ack`) neither side needs a person.
+
+A message is still never an authorization — money, pushes, merges and deploys
+stay with the person at the terminal; a headless run that needs one posts an
+`ask` and stops.
 
 Not part of the packaged Model Boss skill (`scripts/package-skill.sh` does
 not ship it).

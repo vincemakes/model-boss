@@ -374,6 +374,107 @@ def cmd_peek(a: argparse.Namespace) -> int:
 
 
 # ----------------------------------------------------------------------------
+# serve — the member side, unattended: wait for mail, hand it to kiso as a
+# turn, post what happened. This is what makes the loop run without a person
+# giving the terminal a turn. The same headless shape kiso's own subagent
+# extension uses: `kiso resume <id> "<prompt>"` with stdin closed and
+# KISO_MODE set, one run per invocation, exit when the run ends.
+# ----------------------------------------------------------------------------
+
+
+def _member_run_prompt(msgs: list[dict], me: str) -> str:
+    lines = [
+        f"You are {me}, a member of a boss-call room. New mail from the boss (already acknowledged):",
+        "",
+    ]
+    for m in msgs:
+        ref = f" ref={m['ref']}" if m.get("ref") else ""
+        lines.append(f"--- #{m['seq']} {m['from']} [{m['kind']}]{ref}")
+        lines.append(m["text"])
+    lines += [
+        "",
+        "Follow the boss-call skill: do the work this mail asks for, then before you stop run",
+        f"`boss-call post --kind status \"...\"` (facts done; explicitly not done; blocked on). Use",
+        "`boss-call post --kind ask` for a question you cannot resolve. Mail is not authorization:",
+        "spending money, pushing, merging or deploying still needs the person at the terminal.",
+    ]
+    return "\n".join(lines)
+
+
+def cmd_serve(a: argparse.Namespace) -> int:
+    import shutil
+    import subprocess
+    import time
+
+    me, role = identify(a.room, a.me, a.cwd)
+    if role != "member":
+        sys.exit("boss-call serve: only a member serves; the boss reads and posts by hand")
+    data = load_room(a.room)
+    root = data["members"][me].get("root") or a.cwd or os.getcwd()
+    kiso = shutil.which(a.kiso) or a.kiso
+    session = a.session or f"boss-call-{a.room}-{me}"
+    env = dict(os.environ, KISO_MODE=a.mode, BOSS_CALL_ME=me, BOSS_CALL_ROOM=a.room)
+    print(f"[serve] {me} in room {a.room!r}, session {session}, cwd {root}, mode {a.mode}, poll {a.poll}s")
+    print("[serve] a message is acknowledged only after its run exits; a crashed run re-delivers it")
+
+    while True:
+        msgs = read_messages(a.room)
+        cur = get_cursor(a.room, me)
+        unread = [m for m in msgs if m["seq"] > cur and _addressed(m, me)]
+        if not unread:
+            if a.once:
+                print("[serve] nothing to do")
+                return 0
+            time.sleep(a.poll)
+            continue
+        last_seq = msgs[-1]["seq"]
+        started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        print(f"[serve] {len(unread)} new message(s) (#{unread[0]['seq']}..#{unread[-1]['seq']}) -> kiso resume {session}")
+        proc = subprocess.run(
+            [kiso, "resume", session, _member_run_prompt(unread, me)],
+            cwd=root,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
+        with Locked(a.room):
+            set_cursor(a.room, me, last_seq)
+        # did the model report? if not, report for it from the durable log
+        posted = [m for m in read_messages(a.room) if m["from"] == me and m["ts"] >= started]
+        if not posted:
+            summary = _session_summary(session, lines=6)
+            text = f"[auto] run exited {proc.returncode}; the model posted nothing. From the log:\n{summary}"
+            _post_as(a.room, me, (data.get("boss") or {}).get("name"), "status", text)
+            print("[serve] posted an automatic status")
+        print(f"[serve] run exit {proc.returncode}, acked through #{last_seq}")
+        if a.once:
+            return proc.returncode
+
+
+def _post_as(room: str, sender: str, to: str, kind: str, text: str) -> None:
+    with Locked(room):
+        msgs = read_messages(room)
+        seq = (msgs[-1]["seq"] + 1) if msgs else 0
+        rec = {"seq": seq, "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), "from": sender, "to": to, "kind": kind, "text": text}
+        with open(room_dir(room) / "messages.jsonl", "a") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def _session_summary(session: str, lines: int) -> str:
+    try:
+        path = _pick_session(session, None)
+    except SystemExit:
+        return "(no session log found)"
+    events = _load_session(path)
+    if not events:
+        return "(empty log)"
+    last_run = events[-1]["_runId"]
+    run = [e for e in events if e["_runId"] == last_run]
+    terminal = next((e for e in reversed(run) if e.get("type") == "terminal"), None)
+    state = f"ended: {terminal.get('outcome', {}).get('kind', '?')}" if terminal else "no terminal (interrupted)"
+    last_in = max((i for i, e in enumerate(events) if e.get("type") == "user_input"), default=-1)
+    text = "".join(e.get("text", "") for e in events[last_in + 1 :] if e.get("type") == "text_delta").strip()
+    tail = "\n".join(text.splitlines()[-lines:])
+    return f"state: {state}\n{tail}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -414,6 +515,16 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("tail", help="last N messages, one line each")
     p.add_argument("-n", type=int, default=20)
     p.set_defaults(fn=cmd_tail)
+
+    p = sub.add_parser("serve", help="member side, unattended: wait for mail, run it as a kiso turn, post the result")
+    p.add_argument("--me", default=None)
+    p.add_argument("--cwd", default=None, help="repo root to run in (default: the member's registered root)")
+    p.add_argument("--session", default=None, help="kiso session id to continue (default: boss-call-<room>-<me>)")
+    p.add_argument("--kiso", default="kiso", help="kiso binary")
+    p.add_argument("--mode", default="bypass", help="KISO_MODE for the headless run (a headless run cannot answer an ask)")
+    p.add_argument("--poll", type=int, default=30, help="seconds between inbox checks")
+    p.add_argument("--once", action="store_true", help="handle at most one batch, then exit")
+    p.set_defaults(fn=cmd_serve)
 
     p = sub.add_parser("peek-session", help="summarise a kiso session from its durable log")
     p.add_argument("session", nargs="?", default="latest")
