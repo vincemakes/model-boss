@@ -62,6 +62,21 @@ test("serve --once drives a fake kiso binary with flags after the prompt", () =>
 test("help prints the command table; unknown command exits 2", () => {
 	assert.match(bc(["help"]), /boss-call join <room> --as <name>/);
 	assert.throws(() => bc(["frobnicate"]), /unknown command frobnicate/);
+	assert.throws(() => bc(["wait", "--timeout", "nope"], { cwd: A }), /--timeout must be a number/);
+	assert.throws(() => bc(["serve", "--once", "--poll", "0"], { cwd: A }), /--poll must be a number/);
+});
+
+test("setup never replaces an existing non-symlink skill directory", () => {
+	const setupHome = mkdtempSync(join(tmpdir(), "boss-call-setup-"));
+	const existing = join(setupHome, ".agents", "skills", "boss-call");
+	mkdirSync(existing, { recursive: true });
+	writeFileSync(join(existing, "keep.txt"), "mine\n");
+	const env = { ...process.env, HOME: setupHome, BOSS_CALL_HOME: join(setupHome, "mail") };
+	assert.throws(
+		() => execFileSync(process.execPath, [BIN, "setup"], { env, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }),
+		/refusing to replace existing non-symlink/,
+	);
+	assert.equal(readFileSync(join(existing, "keep.txt"), "utf8"), "mine\n");
 });
 
 test("wait blocks until the boss posts, then prints acknowledged mail; status shows who is listening", async () => {

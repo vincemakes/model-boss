@@ -21,7 +21,7 @@ import { existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } f
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BossCallError, ack, formatMessage, heartbeat, host, identify, joinRoom, loadRoom, post, readMessages, resolveRoom, status, statusNudge, unread, waitForMail } from "../src/mailbox.mjs";
+import { HOME, BossCallError, ack, formatMessage, heartbeat, host, identify, joinRoom, loadRoom, post, readMessages, resolveRoom, status, statusNudge, unread, waitForMail } from "../src/mailbox.mjs";
 import { peek } from "../src/peek.mjs";
 import { serve } from "../src/serve.mjs";
 
@@ -56,11 +56,16 @@ function die(msg) {
 	process.exit(2);
 }
 
+function numberFlag(value, fallback, label, { integer = false, min = 0 } = {}) {
+	const n = Number(value ?? fallback);
+	if (!Number.isFinite(n) || (integer && !Number.isInteger(n)) || n < min) die(`${label} must be ${integer ? "an integer" : "a number"} >= ${min}`);
+	return n;
+}
+
 /**
  * Where harnesses look for skills. `~/.agents/skills` is the shared convention
  * (pi, opencode and others read it); Claude Code and Codex have their own
- * directories. The extension is only for a harness that loads one from
- * ~/.kiso/extensions; it is linked only when that directory exists.
+ * directories. boss-call uses only these skill links and the CLI.
  */
 const SKILL_DIRS = [
 	{ at: [".agents", "skills"], always: true, note: "pi, opencode, any agentskills.io harness" },
@@ -71,10 +76,15 @@ const SKILL_DIRS = [
 
 function link(target, at) {
 	mkdirSync(dirname(at), { recursive: true });
+	let current;
 	try {
-		if (lstatSync(at).isSymbolicLink() && readlinkSync(at) === target) return "kept";
-		rmSync(at, { recursive: true, force: true });
-	} catch {}
+		current = lstatSync(at);
+	} catch (err) {
+		if (err.code !== "ENOENT") throw err;
+	}
+	if (current?.isSymbolicLink() && readlinkSync(at) === target) return "kept";
+	if (current?.isSymbolicLink()) rmSync(at);
+	else if (current) throw new BossCallError(`refusing to replace existing non-symlink: ${at}`);
 	symlinkSync(target, at);
 	return "linked";
 }
@@ -94,7 +104,7 @@ function cmdSetup() {
 	try {
 		if (lstatSync(oldExt).isSymbolicLink()) {
 			rmSync(oldExt);
-			console.log("  removed ~/.kiso/extensions/boss-call.mjs (entry is the repo's AGENTS.md now; no extension needed)");
+			console.log("  removed ~/.kiso/extensions/boss-call.mjs (legacy extension; boss-call is CLI + skills only)");
 		}
 	} catch {}
 	if (!onPath("boss-call")) {
@@ -141,7 +151,7 @@ function main(argv) {
 			return 0;
 		}
 		case "tail": {
-			const n = Number.parseInt(flags.n ?? "20", 10);
+			const n = numberFlag(flags.n, 20, "-n", { integer: true });
 			for (const m of readMessages(room).slice(-n)) console.log(`#${String(m.seq).padStart(4)} ${m.ts} ${m.from.padStart(9)} -> ${m.to.padEnd(9)} [${m.kind.padEnd(6)}] ${(m.text.split("\n")[0] ?? "").slice(0, 110)}`);
 			return 0;
 		}
@@ -151,13 +161,13 @@ function main(argv) {
 			if (!msgs.length) console.log(`(no new messages for ${name} in room ${room})`);
 			else {
 				for (const m of msgs) console.log(formatMessage(m));
-				if (flags.ack) console.log(`(acked through #${ack(room, name)})`);
+				if (flags.ack) console.log(`(acked through #${ack(room, name, msgs.at(-1).seq)})`);
 			}
 			return 0;
 		}
 		case "wait": {
 			const { name } = identify(room, flags.me, flags.cwd);
-			const timeout = Number.parseInt(flags.timeout ?? "25", 10); // under every harness's shell-tool timeout (kiso: 30s)
+			const timeout = numberFlag(flags.timeout, 25, "--timeout"); // under every harness's shell-tool timeout (kiso: 30s)
 			const nudge = statusNudge(room, name);
 			if (nudge) {
 				console.log(nudge);
@@ -187,7 +197,7 @@ function main(argv) {
 		case "serve":
 			return serve({
 				room, me: flags.me, cwd: flags.cwd, session: flags.session, bin: flags.kiso, profile: flags.profile, mode: flags.mode,
-				envFile: flags["env-file"], poll: Number.parseInt(flags.poll ?? "30", 10), once: Boolean(flags.once),
+				envFile: flags["env-file"], poll: numberFlag(flags.poll, 30, "--poll", { min: 0.001 }), once: Boolean(flags.once),
 			});
 		case "peek-session":
 			console.log(peek(pos[0] ?? "latest", { match: flags.match ?? null, lines: Number.parseInt(flags.lines ?? "12", 10), width: Number.parseInt(flags.width ?? "160", 10) }));
@@ -220,7 +230,7 @@ function cmdWho({ room, me, cwd }) {
 	try {
 		who = identify(room, me, cwd);
 	} catch {}
-	console.log(`room    : ${room}  (${join(process.env.BOSS_CALL_HOME ?? join(homedir(), ".boss-call"), room)})`);
+	console.log(`room    : ${room}  (${join(HOME, room)})`);
 	console.log(`you     : ${who.name}  (${who.role})`);
 	console.log(`boss    : ${data.boss?.name ?? "-"}${data.boss?.root ? `  root=${data.boss.root}` : ""}`);
 	console.log("members :");

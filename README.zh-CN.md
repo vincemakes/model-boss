@@ -21,6 +21,33 @@ Big models think. Small models ship.
 
 主 skill 从仓根搬进 `boss-dispatch/`，skill 名从 `model-boss` 改成 `boss-dispatch`；触发词不变，更新后重新运行 `bash boss-dispatch/install.sh` 即可。
 
+### 安装并激活 boss-call
+
+`boss-call` 的形态只有 CLI + skills，与 `boss-dispatch` 分开安装，没有 npm 包，也没有 harness 扩展：
+
+```bash
+git clone https://github.com/vincemakes/model-boss.git "$HOME/.local/share/model-boss"
+node "$HOME/.local/share/model-boss/boss-call/bin/boss-call.mjs" setup
+boss-call help
+```
+
+`setup` 会把 skill 链接到已安装 harness 的 skill 目录，并在需要时把 CLI 链接到 `~/.local/bin/boss-call`。它不会改 shell 启动文件；如果 `~/.local/bin` 不在 `PATH` 里，需要你自己加入。
+
+先在 Boss 的工作目录建 room，再到每个成员自己的仓库里注册：
+
+```bash
+boss-call host migration --root "$PWD"
+
+cd ~/work/reelfo
+boss-call join migration --as reelfo
+```
+
+**默认是普通会话。** 安装和 `join` 都不会让这个目录里的所有会话自动变成成员。照常启动 kiso、Claude Code、Codex、pi 或 opencode；只有当你说 **“follow the boss-call skill”** 时，它才会运行 `boss-call who`、认出自己并进入工作循环。Claude Code 也可以用 `/boss-call`。每次新开会话都需要说一次。它不安装扩展，也不会改动成员仓库的 `AGENTS.md`、`CLAUDE.md` 或其他文件。
+
+激活后，一般开发工作无需人工转述每封信：会话自己读信、开发、汇报，然后阻塞在 `boss-call wait` 等下一条指令。花钱、push、merge、deploy 和改生产配置仍必须由该终端的人授权；无法安全推断的产品取舍会用 `ask` 问回来。通用交互路径只有在会话正阻塞于 `wait` 时才在线；当前真正无人启动的 headless resume 只有 kiso 的 `boss-call serve`。
+
+`~/.boss-call/<room>/messages.jsonl` 只保存明确通过 `boss-call` 发送的信箱消息（`seq`、`ts`、`from`、`to`、`kind`、`text` 和可选 `ref`），**不是** Claude、Codex 或其他 harness 的完整对话副本。`peek-session` 可以单独摘要 kiso 自己的 `~/.kiso/sessions/*.jsonl` 事件日志；`boss-call` 不会采集其他 harness 的对应记录。完整安装、自动化边界与磁盘格式见 [boss-call 指南](https://github.com/vincemakes/model-boss/blob/main/boss-call/README.md)。
+
 ## 用法
 
 安装完成后（见下方 Claude Code / Codex 安装小节）不需要运行任何命令——直接在对话里说。`model boss`、`省token`、`分层干活` 这类短语会触发 Skill，然后描述你想要的拓扑：

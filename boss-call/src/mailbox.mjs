@@ -7,19 +7,59 @@
  * `~/.boss-call/<room>/`, append-only where it matters, so a crash loses
  * nothing and every message has a seq.
  *
- * Used by the CLI, by the kiso extension (in-process) and by `serve`.
- * No dependencies.
+ * Used by the CLI and by `serve`. No dependencies.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
-export const HOME = process.env.BOSS_CALL_HOME ?? join(homedir(), ".boss-call");
+const DEFAULT_HOME = join(homedir(), ".boss-call");
+const LEGACY_HOME = join(homedir(), ".model-boss", "boss-call");
+export const HOME = process.env.BOSS_CALL_HOME ?? (existsSync(DEFAULT_HOME) || !existsSync(LEGACY_HOME) ? DEFAULT_HOME : LEGACY_HOME);
 export const KINDS = ["msg", "ask", "reply", "status"];
 
 export class BossCallError extends Error {}
 
+function safeComponent(value, label) {
+	if (typeof value !== "string" || !value || value === "." || value === ".." || /[\\/\0]/.test(value)) {
+		throw new BossCallError(`${label} must be one path-safe name`);
+	}
+	return value;
+}
+
+let tempCounter = 0;
+function fsyncDirectory(path) {
+	let fd;
+	try {
+		fd = openSync(path, "r");
+		fsyncSync(fd);
+	} catch {
+		// Some platforms do not permit opening or syncing a directory.
+	} finally {
+		if (fd !== undefined) closeSync(fd);
+	}
+}
+
+function writeAtomic(path, content) {
+	mkdirSync(dirname(path), { recursive: true });
+	const temp = `${path}.${process.pid}.${Date.now()}.${tempCounter++}.tmp`;
+	let fd;
+	try {
+		fd = openSync(temp, "wx", 0o600);
+		writeFileSync(fd, content);
+		fsyncSync(fd);
+		closeSync(fd);
+		fd = undefined;
+		renameSync(temp, path);
+		fsyncDirectory(dirname(path));
+	} finally {
+		if (fd !== undefined) closeSync(fd);
+		rmSync(temp, { force: true });
+	}
+}
+
 export function roomDir(room) {
+	safeComponent(room, "room");
 	const d = join(HOME, room);
 	mkdirSync(join(d, "cursors"), { recursive: true });
 	return d;
@@ -34,6 +74,7 @@ export function listRooms() {
 }
 
 export function loadRoom(room) {
+	safeComponent(room, "room");
 	const p = join(HOME, room, "room.json");
 	if (!existsSync(p)) return { boss: null, members: {} };
 	const data = JSON.parse(readFileSync(p, "utf8"));
@@ -42,7 +83,7 @@ export function loadRoom(room) {
 }
 
 export function saveRoom(room, data) {
-	writeFileSync(join(roomDir(room), "room.json"), JSON.stringify(data, null, 2) + "\n");
+	writeAtomic(join(roomDir(room), "room.json"), JSON.stringify(data, null, 2) + "\n");
 }
 
 /**
@@ -76,6 +117,7 @@ export function withLock(room, fn) {
 }
 
 export function readMessages(room) {
+	safeComponent(room, "room");
 	const p = join(HOME, room, "messages.jsonl");
 	if (!existsSync(p)) return [];
 	const out = [];
@@ -91,6 +133,7 @@ export function readMessages(room) {
 }
 
 export function getCursor(room, name) {
+	safeComponent(name, "participant name");
 	const p = join(roomDir(room), "cursors", name);
 	if (!existsSync(p)) return -1;
 	const n = Number.parseInt(readFileSync(p, "utf8").trim(), 10);
@@ -98,7 +141,8 @@ export function getCursor(room, name) {
 }
 
 export function setCursor(room, name, seq) {
-	writeFileSync(join(roomDir(room), "cursors", name), `${seq}\n`);
+	safeComponent(name, "participant name");
+	writeAtomic(join(roomDir(room), "cursors", name), `${seq}\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,14 +175,21 @@ export function resolveRoom(explicit, cwd = process.cwd()) {
 	const here = resolve(cwd);
 	const rooms = listRooms();
 	let best = null;
+	const tied = new Set();
 	for (const room of rooms) {
 		const data = loadRoom(room);
 		const roots = [...Object.values(data.members).map((m) => m.root), data.boss?.root];
 		for (const root of roots) {
 			const k = rootContains(root, here);
-			if (k >= 0 && (best === null || k > best.k)) best = { k, room };
+			if (k < 0) continue;
+			if (best === null || k > best.k) {
+				best = { k, room };
+				tied.clear();
+				tied.add(room);
+			} else if (k === best.k) tied.add(room);
 		}
 	}
+	if (tied.size > 1) throw new BossCallError(`which room? this directory matches ${[...tied].join(", ")}; pass --room`);
 	if (best) return best.room;
 	if (rooms.length === 1) return rooms[0];
 	throw new BossCallError(`which room? pass --room or run inside a registered repo (rooms: ${rooms.join(", ") || "none — host or join one"})`);
@@ -171,21 +222,27 @@ export function identify(room, explicit, cwd = process.cwd()) {
 // ---------------------------------------------------------------------------
 
 export function host(room, name, { root, kiso } = {}) {
-	const data = loadRoom(room);
-	if (data.boss && data.boss.name !== name) throw new BossCallError(`room ${room} already has a boss: ${data.boss.name}`);
-	data.boss = { name, ...(root ? { root: resolve(root) } : {}) };
-	if (kiso) data.kiso = { ...(data.kiso ?? {}), ...kiso };
-	saveRoom(room, data);
-	return data;
+	safeComponent(name, "participant name");
+	return withLock(room, () => {
+		const data = loadRoom(room);
+		if (data.boss && data.boss.name !== name) throw new BossCallError(`room ${room} already has a boss: ${data.boss.name}`);
+		data.boss = { name, ...(root ? { root: resolve(root) } : {}) };
+		if (kiso) data.kiso = { ...(data.kiso ?? {}), ...kiso };
+		saveRoom(room, data);
+		return data;
+	});
 }
 
 export function joinRoom(room, name, root, { kiso } = {}) {
-	const data = loadRoom(room);
-	if (!data.boss) throw new BossCallError(`room ${room} has no boss yet — the boss runs \`boss-call host ${room}\` first`);
-	if (data.boss.name === name) throw new BossCallError(`${name} is the boss of ${room}`);
-	data.members[name] = { root: resolve(root), ...(kiso ? { kiso } : {}) };
-	saveRoom(room, data);
-	return data;
+	safeComponent(name, "participant name");
+	return withLock(room, () => {
+		const data = loadRoom(room);
+		if (!data.boss) throw new BossCallError(`room ${room} has no boss yet — the boss runs \`boss-call host ${room}\` first`);
+		if (data.boss.name === name) throw new BossCallError(`${name} is the boss of ${room}`);
+		data.members[name] = { root: resolve(root), ...(kiso ? { kiso } : {}) };
+		saveRoom(room, data);
+		return data;
+	});
 }
 
 export function addressed(m, me) {
@@ -211,7 +268,15 @@ export function post(room, { from, to, kind = "msg", text, ref }) {
 		const seq = msgs.length ? msgs[msgs.length - 1].seq + 1 : 0;
 		const rec = { seq, ts: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), from, to: recipient, kind, text: text.replace(/\n+$/, "") };
 		if (ref) rec.ref = ref;
-		appendFileSync(join(roomDir(room), "messages.jsonl"), JSON.stringify(rec) + "\n");
+		const path = join(roomDir(room), "messages.jsonl");
+		const fd = openSync(path, "a", 0o600);
+		try {
+			writeFileSync(fd, JSON.stringify(rec) + "\n");
+			fsyncSync(fd);
+		} finally {
+			closeSync(fd);
+		}
+		fsyncDirectory(dirname(path));
 		return rec;
 	});
 }
@@ -221,12 +286,16 @@ export function unread(room, me, { all = false } = {}) {
 	return readMessages(room).filter((m) => m.seq > cur && (all || addressed(m, me)));
 }
 
-export function ack(room, me) {
+export function ack(room, me, throughSeq) {
 	const msgs = readMessages(room);
 	if (!msgs.length) return -1;
-	const last = msgs[msgs.length - 1].seq;
-	withLock(room, () => setCursor(room, me, last));
-	return last;
+	const last = throughSeq ?? msgs[msgs.length - 1].seq;
+	if (!Number.isSafeInteger(last) || last < -1) throw new BossCallError("ack sequence must be a nonnegative integer");
+	return withLock(room, () => {
+		const next = Math.max(getCursor(room, me), last);
+		setCursor(room, me, next);
+		return next;
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -238,13 +307,15 @@ export function ack(room, me) {
 // ---------------------------------------------------------------------------
 
 export function heartbeat(room, name, state) {
+	safeComponent(name, "participant name");
 	const d = join(roomDir(room), "heartbeats");
 	mkdirSync(d, { recursive: true });
 	writeFileSync(join(d, name), JSON.stringify({ ts: new Date().toISOString(), state }) + "\n");
 }
 
 export function readHeartbeat(room, name) {
-	const p = join(HOME, room, "heartbeats", name);
+	safeComponent(name, "participant name");
+	const p = join(roomDir(room), "heartbeats", name);
 	if (!existsSync(p)) return null;
 	try {
 		return JSON.parse(readFileSync(p, "utf8"));
@@ -259,6 +330,7 @@ export function readHeartbeat(room, name) {
  *  Returns the nudge text when `me`'s own last message is a status less than
  *  three minutes old that has not been nudged yet; null otherwise. */
 export function statusNudge(room, me) {
+	safeComponent(me, "participant name");
 	const own = readMessages(room).filter((m) => m.from === me).at(-1);
 	if (!own || own.kind !== "status" || Date.now() - Date.parse(own.ts) > 180_000) return null;
 	const marker = join(roomDir(room), "nudged", me);
@@ -274,7 +346,7 @@ export function waitForMail(room, me, { timeoutMs = 25_000, pollMs = 1000, all =
 		heartbeat(room, me, "waiting");
 		const msgs = unread(room, me, { all });
 		if (msgs.length) {
-			ack(room, me);
+			ack(room, me, msgs.at(-1).seq);
 			heartbeat(room, me, "working");
 			return msgs;
 		}
@@ -293,7 +365,7 @@ export async function waitForMailAsync(room, me, { timeoutMs = 1_800_000, pollMs
 		heartbeat(room, me, "waiting");
 		const msgs = unread(room, me, { all });
 		if (msgs.length) {
-			ack(room, me);
+			ack(room, me, msgs.at(-1).seq);
 			heartbeat(room, me, "working");
 			return msgs;
 		}

@@ -69,6 +69,20 @@ test("serve --once: hands mail to kiso as one turn, acks after exit, auto-status
 	assert.match(auto.text, /I did it\./);
 });
 
+test("serve acknowledges only the batch handed to the run", () => {
+	M.post("w", { from: "boss", to: "worker", text: "batch one" });
+	const spawn = (bin, args) => {
+		M.post("w", { from: "boss", to: "worker", text: "arrived while running" });
+		const p = join(process.env.KISO_HOME, "sessions", `${args[1]}.jsonl`);
+		mkdirSync(join(process.env.KISO_HOME, "sessions"), { recursive: true });
+		writeFileSync(p, JSON.stringify({ runId: "batch", event: { type: "user_input", content: args[2] } }) + "\n", { flag: "a" });
+		return { status: 0 };
+	};
+	S.serve({ room: "w", me: "worker", once: true, log: () => {}, spawn });
+	assert.deepEqual(M.unread("w", "worker").map((m) => m.text), ["arrived while running"]);
+	M.ack("w", "worker");
+});
+
 test("serve --once: when the model posts, no auto-status; a boss can be served too", () => {
 	M.post("w", { from: "worker", text: "which branch?", kind: "ask" });
 	const before = M.readMessages("w").length;
@@ -101,6 +115,18 @@ test("a run that never started (session locked, log unchanged) keeps the mail un
 	assert.equal(M.readMessages("w").length, before); // no auto status either
 	assert.ok(M.unread("w", "worker").some((m) => m.text === "again"));
 	assert.match(logs.join("\n"), /run did not start .*open in another kiso/);
+});
+
+test("unrelated session growth does not make a failed run look started", () => {
+	const spawn = (bin, args) => {
+		const p = join(process.env.KISO_HOME, "sessions", `${args[1]}.jsonl`);
+		mkdirSync(join(process.env.KISO_HOME, "sessions"), { recursive: true });
+		writeFileSync(p, JSON.stringify({ runId: "other", event: { type: "user_input", content: "another process wrote this" } }) + "\n", { flag: "a" });
+		return { status: 1 };
+	};
+	const exit = S.serve({ room: "w", me: "worker", once: true, log: () => {}, spawn });
+	assert.equal(exit, 1);
+	assert.ok(M.unread("w", "worker").some((m) => m.text === "again"));
 });
 
 test("a run that started and then crashed (log grew) still acks and reports the exit code", () => {

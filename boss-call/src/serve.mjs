@@ -5,11 +5,10 @@
  * only after the run exits (a crashed run re-delivers), and if the model
  * posted nothing, post a status from the durable log tagged [auto].
  *
- * This is the same headless shape kiso's own subagent extension uses:
- * `kiso resume <session> "<prompt>" --model <profile> --mode bypass`, stdin
- * closed. Flags go AFTER the positional arguments — kiso parses it that way
- * and a flag placed before `resume` swallows the prompt. serve builds the
- * command itself for exactly that reason; no wrapper script is involved.
+ * It calls `kiso resume <session> "<prompt>" --model <profile> --mode bypass`
+ * with stdin closed. Flags go AFTER the positional arguments — kiso parses it
+ * that way and a flag placed before `resume` swallows the prompt. serve builds
+ * the command itself for exactly that reason; no wrapper script is involved.
  *
  * Both roles can be served. A member gets member mail and is told to work
  * and report; a boss gets member mail and is told to reply and direct.
@@ -77,6 +76,12 @@ function logSize(session) {
 	return existsSync(p) ? loadSession(p).length : 0;
 }
 
+function runSawPrompt(session, after, prompt) {
+	const p = join(sessionsDir(), `${session}.jsonl`);
+	if (!existsSync(p)) return false;
+	return loadSession(p).slice(after).some((event) => event.type === "user_input" && event.content === prompt);
+}
+
 function sessionSummary(session, lines) {
 	try {
 		const f = pickSession(session, null);
@@ -121,16 +126,16 @@ export function serve({ room, me: explicit, cwd, session, bin, profile, mode, en
 		const before = logSize(sid);
 		const r = spawn(argv[0], argv.slice(1), { cwd: root, env, stdio: ["ignore", "inherit", "inherit"] });
 		exit = r.status ?? 1;
-		if (exit !== 0 && logSize(sid) === before) {
+		if (exit !== 0 && !runSawPrompt(sid, before, prompt)) {
 			// The run never started (the session is open in another kiso, or
-			// kiso itself failed to launch). The mail stays unread: nothing
-			// has seen it, so nothing may acknowledge it.
-			log(`[serve] run did not start (exit ${exit}, session log unchanged) — is ${sid} open in another kiso? mail #${batch[0].seq}..#${batch.at(-1).seq} kept unread; retrying in ${poll}s`);
+			// kiso itself failed to launch). Unrelated growth from another open
+			// process does not count: this exact prompt must appear in the log.
+			log(`[serve] run did not start (exit ${exit}, prompt absent from session log) — is ${sid} open in another kiso? mail #${batch[0].seq}..#${batch.at(-1).seq} kept unread; retrying in ${poll}s`);
 			if (once) return exit;
 			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, poll * 1000);
 			continue;
 		}
-		ack(room, me);
+		ack(room, me, batch.at(-1).seq);
 		const posted = readMessages(room).some((m) => m.seq > lastSeq && m.from === me);
 		if (!posted) {
 			const to = role === "boss" ? "all" : data.boss.name;

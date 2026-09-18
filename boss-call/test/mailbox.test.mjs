@@ -12,8 +12,10 @@ const M = await import("../src/mailbox.mjs");
 const repos = mkdtempSync(join(tmpdir(), "repos-"));
 const A = join(repos, "a");
 const B = join(repos, "b");
+const C = join(repos, "c");
 mkdirSync(join(A, "deep", "er"), { recursive: true });
 mkdirSync(B);
+mkdirSync(C);
 
 test("host then join; the star is enforced on post", () => {
 	M.host("r1", "boss");
@@ -42,6 +44,15 @@ test("unread is per recipient and per cursor; ack moves the cursor to the end", 
 	assert.deepEqual(M.unread("r1", "a").map((m) => m.seq), [0]);
 });
 
+test("ack can stop at the last message actually delivered", () => {
+	M.host("ack-batch", "boss");
+	M.joinRoom("ack-batch", "worker", C);
+	const first = M.post("ack-batch", { from: "boss", to: "worker", text: "first" });
+	M.post("ack-batch", { from: "boss", to: "worker", text: "arrived later" });
+	assert.equal(M.ack("ack-batch", "worker", first.seq), first.seq);
+	assert.deepEqual(M.unread("ack-batch", "worker").map((m) => m.text), ["arrived later"]);
+});
+
 test("identity comes from the cwd, deepest root wins, and the room from the cwd too", () => {
 	assert.deepEqual(M.identify("r1", undefined, join(A, "deep", "er")), { name: "a", role: "member" });
 	assert.deepEqual(M.identify("r1", undefined, B), { name: "b", role: "member" });
@@ -55,6 +66,29 @@ test("identity comes from the cwd, deepest root wins, and the room from the cwd 
 	assert.equal(M.resolveRoom(undefined, A), "r1");
 	assert.deepEqual(M.identify("r2", undefined, join(A, "deep")), { name: "chief", role: "boss" });
 	assert.throws(() => M.resolveRoom(undefined, tmpdir()), /which room/);
+});
+
+test("an equal-depth repository match requires an explicit room", () => {
+	M.host("same-root", "other-boss");
+	M.joinRoom("same-root", "other-a", A);
+	assert.throws(() => M.resolveRoom(undefined, A), /matches .*r1.*same-root/);
+	assert.equal(M.resolveRoom("r1", A), "r1");
+});
+
+test("room and participant names cannot escape their state directories", () => {
+	assert.throws(() => M.host("../outside", "boss"), /path-safe/);
+	assert.throws(() => M.host("safe-room", "../boss"), /path-safe/);
+});
+
+test("the legacy mailbox home remains visible when the new home is absent", async () => {
+	const { execFileSync } = await import("node:child_process");
+	const home = mkdtempSync(join(tmpdir(), "boss-call-home-"));
+	mkdirSync(join(home, ".model-boss", "boss-call"), { recursive: true });
+	const env = { ...process.env, HOME: home };
+	delete env.BOSS_CALL_HOME;
+	const script = `import(${JSON.stringify(new URL("../src/mailbox.mjs?legacy-home-test", import.meta.url).href)}).then(M => process.stdout.write(M.HOME))`;
+	const actual = execFileSync(process.execPath, ["--input-type=module", "-e", script], { env, encoding: "utf8" });
+	assert.equal(actual, join(home, ".model-boss", "boss-call"));
 });
 
 test("status counts unread and asks per participant", () => {
@@ -85,6 +119,21 @@ test("posting under contention keeps seq unique", async () => {
 	assert.equal(seqs.length, before + 60);
 	assert.equal(new Set(seqs).size, seqs.length);
 	void execFileSync;
+});
+
+test("joining under contention preserves every member", async () => {
+	M.host("join-race", "boss");
+	const moduleUrl = new URL("../src/mailbox.mjs", import.meta.url).href;
+	const script = `import(${JSON.stringify(moduleUrl)}).then(M => M.joinRoom("join-race", process.argv[1], process.argv[2]))`;
+	await Promise.all(Array.from({ length: 12 }, (_, i) => new Promise((res, rej) => {
+		import("node:child_process").then(({ execFile }) => execFile(
+			process.execPath,
+			["--input-type=module", "-e", script, `member-${i}`, A],
+			{ env: process.env },
+			(err) => (err ? rej(err) : res()),
+		));
+	})));
+	assert.equal(Object.keys(M.loadRoom("join-race").members).length, 12);
 });
 
 test("waitForMail returns as soon as mail lands, acknowledged, and leaves a heartbeat", async () => {
