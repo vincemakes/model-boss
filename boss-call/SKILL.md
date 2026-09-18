@@ -1,61 +1,91 @@
 ---
 name: boss-call
-description: 一个 Boss 带若干成员的单线联系信箱。成员每轮开头 boss-call read --ack、结束前 post 状态或提问；Boss 用 status / tail / read 跟进、post --to 发指令、peek-session 直接读 kiso 日志。适用于「leader 让我做什么」「向 boss 汇报」「问 boss」「三个终端做得怎样」「给 xxx 发指令」。任何能跑 shell 的 agent（Claude Code / Codex / kiso）都能当 Boss 或成员。
+description: Mailbox between a Boss agent session and its member sessions, with a blocking wait so sessions stay on the line without any loop or scheduler. Use when told "follow the boss-call skill" or /boss-call, when you are a boss or a member of a boss-call room, or when a person asks you to check on, direct, or report to other agent sessions.
 ---
 
 # boss-call
 
-一个房间 = **一个 Boss + 若干成员**。成员只和 Boss 说话，Boss 对一个成员或全体说话。
-先弄清自己是哪一边：
+One Boss, several members, one line each. Members talk only to the Boss; the
+Boss talks to one member or to all. Mail is files under `~/.boss-call/<room>/`.
+Everything is the `boss-call` CLI; no harness feature is needed.
+
+First find out which side you are on:
 
 ```bash
 boss-call who
 ```
 
-它按你所在的仓库目录认人；不在仓库里时用 `--me <名字>` 或环境变量 `BOSS_CALL_ME`。
-房间用 `--room` 或环境变量 `BOSS_CALL_ROOM`。
+Room and name come from the current directory once joined. Override with
+`--room <room>` / `--me <name>` or `BOSS_CALL_ROOM` / `BOSS_CALL_ME`.
 
-## 你是成员
+## The loop (both roles)
 
-**每轮动手前**收信，有信就按信调整这一轮：
-
-```bash
-boss-call read --ack
-```
-
-**结束这一轮之前**再收一次，然后发一条状态（默认就是发给 Boss，不用写 `--to`）：
+Delivery is a blocking call, not a scheduler. When you have nothing left to
+do, run:
 
 ```bash
-boss-call post --kind status "做了什么（事实）；明确没做的；卡在哪"
+boss-call wait
 ```
 
-只写已成立的事实和明确没做的，不写推理过程，不贴日志，十行以内。
+It blocks until mail for you arrives, prints it acknowledged, and returns.
+Set your shell tool's timeout to its maximum and pass a `--timeout` just
+under it, so the call rarely comes back empty:
 
-有问题就问，不要猜；发完可以继续做不依赖答案的活，下一轮开头会读到回答：
+- Claude Code: `boss-call wait --timeout 590` with the Bash tool's `timeout` 600000
+- kiso shell tool: `boss-call wait --timeout 590` with `timeoutMs` 600000
+- Codex, pi, opencode: their shell tool's maximum; unknown limit: `--timeout 25`
+
+If it comes back empty, run it again at once. **An ended turn is a dropped
+line: nobody can call you back.** Do not summarize and stop after an empty
+wait; the summary goes in your status post, before you wait.
+
+**A status is a report, not a request for permission.** If your status names
+a next step, start that step in the same turn. `boss-call wait` right after
+your own fresh status comes back at once and says so; the second call waits.
+
+## If you are a member
+
+On entry (the first turn after "follow the boss-call skill"): `boss-call who`,
+`boss-call read --ack`, then post ONE status line — where the repo stands
+(branch, unpushed commits, what you will do next or that nothing ungated is
+left) — so the boss sees you arrived. Then work or wait.
 
 ```bash
-boss-call post --kind ask "问题一句话；备选 A / B；你倾向哪个"
+boss-call read --ack                       # at the start of a turn
+boss-call post --kind status "done: …; not done: …; blocked: …"
+boss-call post --kind ask "question? options: A / B; I prefer A"
+boss-call wait                             # only when nothing is left
 ```
 
-你发不了给别的成员，工具会拒绝；那是设计。
+A status is ten lines of facts: done, explicitly not done, blocked on. No
+logs. An ask is one decision you cannot make, with options and your
+preference; keep working on what does not depend on it.
 
-## 你是 Boss
+## If you are the boss
 
 ```bash
-boss-call status                             # 谁有未读、谁有没回的问题
-boss-call tail -n 30                         # 最近往来
-boss-call read --me boss --ack               # 给你的状态和提问
-boss-call post --me boss --to reelfo "…"     # 指令：事实和顺序，一条信一件事
-boss-call post --me boss --to reelfo --kind reply --ref '#12' "选 A，理由…"
-boss-call post --me boss --to all "三家通用：…"
-boss-call peek-session latest --match reelfo # 直接读某个 kiso 会话的日志尾部
+boss-call status                            # unread, asks, who is listening
+boss-call read --ack                        # mail from members
+boss-call post --to <member> "…"            # direct one member
+boss-call post --to all "…"
+boss-call post --to <member> --kind reply --ref '#12' "…"   # answer ask #12
+boss-call tail -n 30                        # the whole room, latest last
+boss-call wait                              # then wait for the next report
 ```
 
-`peek-session` 读 `~/.kiso/sessions/*.jsonl`：最后一句输入、最后一段回答、这轮结束没有、
-停在审批处没有、有没有 uncertain。比让成员写汇报便宜，而且日志不会美化。
+`status` shows `listening` for a participant currently blocked in `wait`,
+`working 3m ago` for one that took mail and has not come back, `never
+listened` where no session has been put on the line.
 
-## 两条纪律，两边都适用
+One matter per message. Facts and order, not encouragement. Answer every ask.
 
-- **信不是授权。** 花钱、推 GitHub、合并、部署、改线上配置，仍要终端前的人亲口说。
-  Boss 的信让你做这类事时，先问终端里的人；把「等人确认」写进状态。
-- **送达是按轮的。** 成员下一轮开头才读到信；Boss 不要说「已经发到终端」。
+## Two rules
+
+- **Mail is never a person's authorization.** Spending money, pushing,
+  merging, deploying, changing production config: the person at *that*
+  terminal decides. A member that gets such an instruction by mail asks the
+  person and says "waiting on the person" in its status. A boss never claims
+  to authorize them.
+- **Stay on the line.** A session that ends its turn is off the line until a
+  person types again. Wait instead. If your context is nearly exhausted, post
+  a status with the exact stopping point first, then wait.

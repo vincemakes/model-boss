@@ -21,6 +21,33 @@ Canonical repository: [https://github.com/vincemakes/model-boss](https://github.
 
 The dispatch skill moved from the repository root into `boss-dispatch/` and its skill name changed `model-boss` → `boss-dispatch`; trigger phrases are unchanged, so re-run `bash boss-dispatch/install.sh` after updating.
 
+### Install and activate boss-call
+
+`boss-call` is a CLI plus skills; it is installed separately from `boss-dispatch` and has no npm package or harness extension:
+
+```bash
+git clone https://github.com/vincemakes/model-boss.git "$HOME/.local/share/model-boss"
+node "$HOME/.local/share/model-boss/boss-call/bin/boss-call.mjs" setup
+boss-call help
+```
+
+`setup` links the skill into the supported harness skill directories and, when needed, links the CLI at `~/.local/bin/boss-call`. It never edits shell startup files, so add `~/.local/bin` to `PATH` yourself if necessary.
+
+Create a room in the Boss's working directory, then register each member from its own repository:
+
+```bash
+boss-call host migration --root "$PWD"
+
+cd ~/work/reelfo
+boss-call join migration --as reelfo
+```
+
+Installation and `join` do **not** turn every session in that directory into a member. Start kiso, Claude Code, Codex, pi, or opencode normally; it remains an ordinary session until you say **“follow the boss-call skill”**. In Claude Code, `/boss-call` is the equivalent shortcut. A newly opened session needs that instruction once. No extension is installed, and `boss-call` never writes `AGENTS.md`, `CLAUDE.md`, or any other file in the registered repository.
+
+After activation, routine work can continue without a person relaying every message: the session reads mail, works, reports, and blocks in `boss-call wait` for the next instruction. Human authorization is still required for spending money, pushing, merging, deploying, and production configuration; an underspecified product choice is sent back as an `ask`. The generic interactive path stays alive only while the session is blocked in `wait`; optional fully headless resume is currently kiso-only through `boss-call serve`.
+
+The mailbox at `~/.boss-call/<room>/messages.jsonl` stores only messages deliberately posted through `boss-call` (`seq`, `ts`, `from`, `to`, `kind`, `text`, and optional `ref`). It is not a copy of the Claude, Codex, or other harness conversation. `peek-session` can separately summarize kiso's own `~/.kiso/sessions/*.jsonl` event log; boss-call does not collect equivalent transcripts from the other harnesses. See [the boss-call guide](https://github.com/vincemakes/model-boss/blob/main/boss-call/README.md) for the complete setup, automation boundary, and on-disk format.
+
 ## Usage
 
 After install (see the Claude Code and Codex setup sections below) there is no command to run — you invoke Model Boss conversationally. Phrases like `model boss`, `save model tokens`, or `分层干活` trigger the skill; then describe the topology you want:

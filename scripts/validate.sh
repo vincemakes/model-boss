@@ -6,12 +6,19 @@ repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd -P)"
 skill_root="$repo_root/boss-dispatch"
 cd "$repo_root"
 
+export PYTHONPATH="$skill_root${PYTHONPATH:+:$PYTHONPATH}"
+
 command -v python3 >/dev/null 2>&1 || {
   echo "Model Boss: python3 is required" >&2
   exit 127
 }
+command -v node >/dev/null 2>&1 || {
+  echo "Model Boss: Node.js 22+ is required for boss-call" >&2
+  exit 127
+}
 
 python3 -m unittest discover -s tests -v
+node --test boss-call/test/*.test.mjs
 
 for json_file in \
   boss-dispatch/config/model-boss.schema.json \
@@ -49,13 +56,11 @@ python3 -m unittest tests.test_skill_content tests.test_docs -q
 
 validation_tmp="$(mktemp -d)"
 trap 'rm -rf -- "$validation_tmp"' EXIT HUP INT TERM
-PYTHONPATH="$skill_root${PYTHONPATH:+:$PYTHONPATH}" \
-  python3 -m runtime.model_boss.package \
+python3 -m runtime.model_boss.package \
   --repo-root "$repo_root" \
   --output "$validation_tmp/boss-dispatch.skill" >/dev/null
 cmp dist/boss-dispatch.skill "$validation_tmp/boss-dispatch.skill"
-PYTHONPATH="$skill_root${PYTHONPATH:+:$PYTHONPATH}" \
-  python3 -m runtime.model_boss.package \
+python3 -m runtime.model_boss.package \
   --repo-root "$repo_root" \
   --validate "$validation_tmp/boss-dispatch.skill" >/dev/null
 unzip -t "$validation_tmp/boss-dispatch.skill" >/dev/null

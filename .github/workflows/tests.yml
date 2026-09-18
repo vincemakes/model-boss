@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - run: python3 -m pip install pyyaml
-      - run: python3 -m unittest discover -s tests
-      - run: PYTHONPATH=boss-dispatch python3 -m runtime.model_boss.package --repo-root . --validate dist/boss-dispatch.skill
+      - run: bash scripts/validate.sh
