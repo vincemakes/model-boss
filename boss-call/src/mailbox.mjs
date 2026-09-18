@@ -10,7 +10,7 @@
  * Used by the CLI, by the kiso extension (in-process) and by `serve`.
  * No dependencies.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -188,6 +188,31 @@ export function joinRoom(room, name, root, { kiso } = {}) {
 	return data;
 }
 
+// ---------------------------------------------------------------------------
+// pausing: a member's repo is still a person's repo. `boss-call pause` (in
+// the repo) writes a marker; while it exists, the kiso extension stays empty
+// there and a session started in that directory is an ordinary session.
+// BOSS_CALL=off does the same for one process.
+// ---------------------------------------------------------------------------
+
+export function pausePath(room, name) {
+	return join(roomDir(room), "paused", name);
+}
+
+export function setPaused(room, name, on) {
+	const p = pausePath(room, name);
+	if (on) {
+		mkdirSync(join(roomDir(room), "paused"), { recursive: true });
+		writeFileSync(p, new Date().toISOString() + "\n");
+	} else if (existsSync(p)) {
+		rmSync(p);
+	}
+}
+
+export function isPaused(room, name) {
+	return existsSync(pausePath(room, name));
+}
+
 export function addressed(m, me) {
 	return (m.to === me || m.to === "all") && m.from !== me;
 }
@@ -311,6 +336,7 @@ export function status(room) {
 			const hb = readHeartbeat(room, n);
 			return {
 				heartbeat: hb,
+				paused: isPaused(room, n),
 				name: n,
 				role: n === data.boss?.name ? "boss" : "member",
 				unread: un.length,

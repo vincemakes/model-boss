@@ -57,3 +57,24 @@ test("boss_wait right after one's own fresh status returns the nudge once, then 
 	assert.match(second.content, /NO MAIL YET/);
 	assert.ok(Date.now() - t0 >= 900, "the second call really waited");
 });
+
+test("BOSS_CALL=off and boss-call pause make the extension empty in a member repo", () => {
+	const repo = mkdtempSync(join(tmpdir(), "repo-"));
+	M.host("z", "boss");
+	M.joinRoom("z", "m3", repo);
+	const cwd = process.cwd();
+	process.chdir(repo);
+	try {
+		assert.equal(X.default().tools.length, 3);
+		process.env.BOSS_CALL = "off";
+		assert.deepEqual(X.default(), { name: "boss-call" });
+		delete process.env.BOSS_CALL;
+		M.setPaused("z", "m3", true);
+		assert.deepEqual(X.default(), { name: "boss-call" });
+		assert.equal(M.status("z").rows.find((r) => r.name === "m3").paused, true);
+		M.setPaused("z", "m3", false);
+		assert.equal(X.default().tools.length, 3);
+	} finally {
+		process.chdir(cwd);
+	}
+});

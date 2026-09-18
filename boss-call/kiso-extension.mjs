@@ -10,19 +10,23 @@
  *   boss_wait(timeoutSeconds) block until mail arrives — the session stays on the line
  *
  * Anywhere else it exports an empty extension: no prompt rent, no tools. So a
- * plain `kiso` started inside a member repo IS the member session.
+ * plain `kiso` started inside a member repo IS the member session — unless
+ * the person opted out: `BOSS_CALL=off kiso` for one session, or
+ * `boss-call pause` in the repo until `boss-call resume`.
  *
  * In-process: it imports the same mailbox module the CLI uses. One
  * implementation, no shelling out.
  */
 import { resolve } from "node:path";
-import { ack, formatMessage, identify, listRooms, loadRoom, post, readMessages, resolveRoom, unread, waitForMailAsync } from "./src/mailbox.mjs";
+import { ack, formatMessage, identify, isPaused, listRooms, loadRoom, post, readMessages, resolveRoom, unread, waitForMailAsync } from "./src/mailbox.mjs";
 
 function locate(cwd) {
+	if (/^(off|0|false|no)$/i.test(process.env.BOSS_CALL ?? "")) return null; // BOSS_CALL=off kiso: an ordinary session
 	if (!listRooms().length) return null;
 	try {
 		const room = resolveRoom(undefined, cwd);
 		const who = identify(room, undefined, cwd);
+		if (isPaused(room, who.name)) return null; // `boss-call pause` in this repo
 		return { room, ...who, boss: loadRoom(room).boss?.name ?? "boss" };
 	} catch {
 		return null;

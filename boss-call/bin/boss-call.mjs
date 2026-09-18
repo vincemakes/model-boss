@@ -6,6 +6,7 @@
  *   boss-call host <room>                become the boss of a room
  *   boss-call join <room> --as <name>    join a room as a member; the current directory is your repo
  *   boss-call who                        which side you are on
+ *   boss-call pause | resume             stop / restart being a member here (BOSS_CALL=off does it for one session)
  *   boss-call read [--ack]               unread mail for you
  *   boss-call wait [--timeout 25]        block until mail arrives (acknowledged), then print it
  *                                        (--timeout 590 with a 600 s shell-tool timeout: fewer empty returns)
@@ -21,7 +22,7 @@ import { existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } f
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BossCallError, ack, formatMessage, heartbeat, host, identify, joinRoom, loadRoom, post, readMessages, resolveRoom, status, unread, waitForMail } from "../src/mailbox.mjs";
+import { BossCallError, ack, formatMessage, heartbeat, host, identify, isPaused, joinRoom, loadRoom, post, readMessages, resolveRoom, setPaused, status, unread, waitForMail } from "../src/mailbox.mjs";
 import { peek } from "../src/peek.mjs";
 import { serve } from "../src/serve.mjs";
 
@@ -134,7 +135,7 @@ function main(argv) {
 		case "status": {
 			const s = status(room);
 			console.log(`room ${room}: boss=${s.boss ?? "-"}  ${s.total} messages`);
-			for (const r of s.rows) console.log(`  ${r.role.padEnd(6)} ${r.name.padEnd(12)} unread=${String(r.unread).padStart(3)} asks=${String(r.asks).padStart(2)} ${presence(r.heartbeat).padEnd(22)} last-posted=${r.lastPosted ?? "-"}`);
+			for (const r of s.rows) console.log(`  ${r.role.padEnd(6)} ${r.name.padEnd(12)} unread=${String(r.unread).padStart(3)} asks=${String(r.asks).padStart(2)} ${(r.paused ? "PAUSED" : presence(r.heartbeat)).padEnd(22)} last-posted=${r.lastPosted ?? "-"}`);
 			return 0;
 		}
 		case "tail": {
@@ -162,6 +163,15 @@ function main(argv) {
 			}
 			for (const m of msgs) console.log(formatMessage(m));
 			console.log(`(acked through #${msgs.at(-1).seq}. Act on it and keep working; post a status when a piece is done and continue at once. Run \`boss-call wait\` only when nothing is left to do.)`);
+			return 0;
+		}
+		case "pause":
+		case "resume": {
+			const { name } = identify(room, flags.me, flags.cwd);
+			setPaused(room, name, cmd === "pause");
+			console.log(cmd === "pause"
+				? `${name} paused in room ${room}: a kiso started here is an ordinary session until \`boss-call resume\` (a running one keeps its role until restarted)`
+				: `${name} resumed in room ${room}: the next kiso started here is the member again`);
 			return 0;
 		}
 		case "ack": {
@@ -219,6 +229,7 @@ function cmdWho({ room, me, cwd }) {
 	for (const [n, m] of Object.entries(data.members)) console.log(`  ${n.padEnd(12)} ${m.root ?? ""}`);
 	if (who.role === "member") console.log(`\nyou talk only to ${data.boss?.name}: \`boss-call post "..."\` goes there by default.`);
 	else if (who.role === "boss") console.log("\nyou may `post --to <member>` or `--to all`; members can only reach you.");
+	if (who.role !== "unknown" && isPaused(room, who.name)) console.log("\nPAUSED here: sessions started in this repo are ordinary until `boss-call resume`.");
 	if (who.role !== "unknown") console.log("to put an agent session started here on the line, tell it: follow the boss-call skill");
 	return 0;
 }

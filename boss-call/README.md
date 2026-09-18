@@ -47,7 +47,9 @@ cd ~/work/reelfo && boss-call join migration --as reelfo
 ```
 
 From then on nothing needs a flag. Any agent session started in that directory
-finds the skill and knows it is `reelfo`:
+finds the skill and knows it is `reelfo`. When you want to work in that repo
+on something else, opt out: `BOSS_CALL=off kiso` for one session, or
+`boss-call pause` there until `boss-call resume` (`status` shows PAUSED):
 
 ```bash
 boss-call read --ack
