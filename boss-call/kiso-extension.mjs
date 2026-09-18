@@ -118,7 +118,7 @@ export default function bossCall() {
 						const msgs = await waitForMailAsync(room, name, { timeoutMs: secs * 1000, signal: ctx?.signal });
 						if (ctx?.signal?.aborted) return { content: "(wait interrupted by the person at this terminal — do what they say)", isError: false };
 						if (!msgs.length) return { content: `NO MAIL YET after ${secs}s. Call boss_wait again now; do not end your turn.`, isError: false };
-						return { content: msgs.map(formatMessage).join("\n") + "\n(act on this, post a status, then boss_wait again)", isError: false };
+						return { content: msgs.map(formatMessage).join("\n") + "\n(acknowledged. Act on it and keep working; post a status when a piece is done and continue at once. Call boss_wait only when nothing is left to do.)", isError: false };
 					} catch (err) {
 						return { content: `[boss-call] ${err.message}`, isError: true };
 					}

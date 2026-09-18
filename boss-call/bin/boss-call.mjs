@@ -161,7 +161,7 @@ function main(argv) {
 				return 0;
 			}
 			for (const m of msgs) console.log(formatMessage(m));
-			console.log(`(acked through #${msgs.at(-1).seq}; act on this, post a status, then \`boss-call wait\` again)`);
+			console.log(`(acked through #${msgs.at(-1).seq}. Act on it and keep working; post a status when a piece is done and continue at once. Run \`boss-call wait\` only when nothing is left to do.)`);
 			return 0;
 		}
 		case "ack": {

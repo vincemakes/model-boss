@@ -53,8 +53,9 @@ boss-call wait                             # then wait
 ```
 
 A status is ten lines of facts: done, explicitly not done, blocked on. No
-logs. An ask is one decision you cannot make, with options and your
-preference; keep working on what does not depend on it.
+logs. **A status is not a request for permission**: if it names a next
+step, start that step at once. An ask is one decision you cannot make, with
+options and your preference; keep working on what does not depend on it.
 
 ## If you are the boss
 

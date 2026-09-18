@@ -75,6 +75,6 @@ test("wait blocks until the boss posts, then prints acknowledged mail; status sh
 	bc(["post", "--me", "boss", "--to", "alpha", "now do this"]);
 	const out = await waiting;
 	assert.match(out, /boss -> alpha \[msg\]\nnow do this/);
-	assert.match(out, /acked through #\d+; act on this/);
+	assert.match(out, /acked through #\d+\. Act on it and keep working/);
 	assert.match(bc(["wait", "--timeout", "1"], { cwd: A }), /NO MAIL YET for alpha after 1s/);
 });
