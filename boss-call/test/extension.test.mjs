@@ -35,3 +35,25 @@ test("inside a member root: identity, three tools, and the shell wait is denied 
 	assert.deepEqual(X.decideCall({ name: "shell", input: { command: "boss-call read --ack" } }), { action: "abstain" });
 	assert.deepEqual(X.decideCall({ name: "read_file", input: { path: "boss-call-wait.md" } }), { action: "abstain" });
 });
+
+test("boss_wait right after one's own fresh status returns the nudge once, then waits", async () => {
+	const repo = mkdtempSync(join(tmpdir(), "repo-"));
+	M.host("y", "boss");
+	M.joinRoom("y", "m2", repo);
+	const cwd = process.cwd();
+	process.chdir(repo);
+	let e;
+	try {
+		e = X.default();
+	} finally {
+		process.chdir(cwd);
+	}
+	const wait = e.tools.find((t) => t.name === "boss_wait");
+	M.post("y", { from: "m2", kind: "status", text: "done X; next: Y" });
+	const first = await wait.execute({ timeoutSeconds: 5 }, {});
+	assert.match(first.content, /You posted status #0 .*do that step now/);
+	const t0 = Date.now();
+	const second = await wait.execute({ timeoutSeconds: 1 }, {});
+	assert.match(second.content, /NO MAIL YET/);
+	assert.ok(Date.now() - t0 >= 900, "the second call really waited");
+});

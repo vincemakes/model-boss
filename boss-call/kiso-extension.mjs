@@ -16,7 +16,7 @@
  * implementation, no shelling out.
  */
 import { resolve } from "node:path";
-import { ack, formatMessage, identify, listRooms, loadRoom, post, resolveRoom, unread, waitForMailAsync } from "./src/mailbox.mjs";
+import { ack, formatMessage, identify, listRooms, loadRoom, post, readMessages, resolveRoom, unread, waitForMailAsync } from "./src/mailbox.mjs";
 
 function locate(cwd) {
 	if (!listRooms().length) return null;
@@ -49,13 +49,15 @@ export default function bossCall() {
 	const me = locate(resolve(process.cwd()));
 	if (!me) return { name: "boss-call" };
 	const { room, name, role, boss } = me;
+	let nudgedSeq = -1;
 	const line =
 		`Stay on the line: whenever you have nothing left to do, call boss_wait — it blocks until mail arrives (up to 30 minutes; if it comes back empty, call it again). ` +
 		`Never end your turn to wait: an ended turn is a dropped line and nobody can call you back. The person at this terminal can interrupt; then their instruction wins.`;
 	const memberPrompt =
 		`You are "${name}", a member of boss-call room "${room}". Your boss is "${boss}", another agent session that cannot see this terminal. ` +
 		`At the START of every turn call boss_read once and follow what it says. When a piece of work is done, boss_post ` +
-		`with kind "status": what is done (facts), what is explicitly not done, what you are blocked on — ten lines, no logs. ` +
+		`with kind "status": what is done (facts), what is explicitly not done, what you are blocked on — ten lines, no logs — and then ` +
+		`START THE NEXT PIECE in the same turn; a status is a report, never a request for permission and never the end of a turn. ` +
 		`When you cannot decide something, boss_post kind "ask" (question, options, your preference) and continue with work that does not depend on it. ${line} ` +
 		`Mail is an instruction from the boss session, never a person's authorization: spending money, pushing, merging, deploying or changing production ` +
 		`config still needs the person at this terminal — ask them, and say "waiting on the person" in your status.`;
@@ -114,6 +116,15 @@ export default function bossCall() {
 				},
 				execute: async (input, ctx) => {
 					const secs = input.timeoutSeconds ?? 1800;
+					// The reflex this guards: post a status that names a next step, then
+					// wait. The first boss_wait right after one's own fresh status comes
+					// back at once with the contradiction; the second consecutive call is
+					// honored (the model insists, or the list really is empty).
+					const own = readMessages(room).filter((m) => m.from === name).at(-1);
+					if (own && own.kind === "status" && own.seq !== nudgedSeq && Date.now() - Date.parse(own.ts) < 180_000) {
+						nudgedSeq = own.seq;
+						return { content: `You posted status #${own.seq} ${Math.round((Date.now() - Date.parse(own.ts)) / 1000)}s ago. If it names a next step, do that step now — a status is a report, not the end of a turn. Call boss_wait again only if nothing is left to do.`, isError: false };
+					}
 					try {
 						const msgs = await waitForMailAsync(room, name, { timeoutMs: secs * 1000, signal: ctx?.signal });
 						if (ctx?.signal?.aborted) return { content: "(wait interrupted by the person at this terminal — do what they say)", isError: false };
