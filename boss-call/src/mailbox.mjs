@@ -188,31 +188,6 @@ export function joinRoom(room, name, root, { kiso } = {}) {
 	return data;
 }
 
-// ---------------------------------------------------------------------------
-// pausing: a member's repo is still a person's repo. `boss-call pause` (in
-// the repo) writes a marker; while it exists, the kiso extension stays empty
-// there and a session started in that directory is an ordinary session.
-// BOSS_CALL=off does the same for one process.
-// ---------------------------------------------------------------------------
-
-export function pausePath(room, name) {
-	return join(roomDir(room), "paused", name);
-}
-
-export function setPaused(room, name, on) {
-	const p = pausePath(room, name);
-	if (on) {
-		mkdirSync(join(roomDir(room), "paused"), { recursive: true });
-		writeFileSync(p, new Date().toISOString() + "\n");
-	} else if (existsSync(p)) {
-		rmSync(p);
-	}
-}
-
-export function isPaused(room, name) {
-	return existsSync(pausePath(room, name));
-}
-
 export function addressed(m, me) {
 	return (m.to === me || m.to === "all") && m.from !== me;
 }
@@ -280,6 +255,19 @@ export function readHeartbeat(room, name) {
 
 /** Block until mail for `me` arrives or `timeoutMs` passes. Returns the mail
  *  (acknowledged) or [] on timeout. Polls the file; cheap and portable. */
+/** The reflex this guards: post a status that names a next step, then wait.
+ *  Returns the nudge text when `me`'s own last message is a status less than
+ *  three minutes old that has not been nudged yet; null otherwise. */
+export function statusNudge(room, me) {
+	const own = readMessages(room).filter((m) => m.from === me).at(-1);
+	if (!own || own.kind !== "status" || Date.now() - Date.parse(own.ts) > 180_000) return null;
+	const marker = join(roomDir(room), "nudged", me);
+	mkdirSync(join(roomDir(room), "nudged"), { recursive: true });
+	if (existsSync(marker) && readFileSync(marker, "utf8").trim() === String(own.seq)) return null;
+	writeFileSync(marker, `${own.seq}\n`);
+	return `You posted status #${own.seq} ${Math.round((Date.now() - Date.parse(own.ts)) / 1000)}s ago. If it names a next step, do that step now — a status is a report, not the end of a turn. Wait again only if nothing is left to do.`;
+}
+
 export function waitForMail(room, me, { timeoutMs = 25_000, pollMs = 1000, all = false } = {}) {
 	const deadline = Date.now() + timeoutMs;
 	for (;;) {
@@ -336,7 +324,6 @@ export function status(room) {
 			const hb = readHeartbeat(room, n);
 			return {
 				heartbeat: hb,
-				paused: isPaused(room, n),
 				name: n,
 				role: n === data.boss?.name ? "boss" : "member",
 				unread: un.length,

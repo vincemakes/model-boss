@@ -22,9 +22,9 @@ git clone https://github.com/vincemakes/model-boss && node model-boss/boss-call/
 ```
 
 `setup` links the skill into every harness present on the machine
-(`~/.agents/skills` always; `~/.claude`, `~/.codex` when they exist) and puts
-`boss-call` on your PATH if it is not already. Run it again after an upgrade.
-It is idempotent and only creates symlinks.
+(`~/.agents/skills` always; `~/.claude`, `~/.codex`, `~/.kiso` when they
+exist) and puts `boss-call` on your PATH if it is not already. Run it again
+after an upgrade. It is idempotent and only creates symlinks.
 
 To have an AI do it, paste this:
 
@@ -46,10 +46,11 @@ Each member, inside its own repo (the directory becomes its identity):
 cd ~/work/reelfo && boss-call join migration --as reelfo
 ```
 
-From then on nothing needs a flag. Any agent session started in that directory
-finds the skill and knows it is `reelfo`. When you want to work in that repo
-on something else, opt out: `BOSS_CALL=off kiso` for one session, or
-`boss-call pause` there until `boss-call resume` (`status` shows PAUSED):
+A session started in that directory is an ordinary session until the person
+says one thing to it: **follow the boss-call skill** (or `/boss-call` where
+the harness has slash commands). Then it runs `boss-call who`, learns it is
+`reelfo`, and follows the loop below. Nothing is written into the repo and no
+harness extension is installed; the CLI and the skill are the whole thing:
 
 ```bash
 boss-call read --ack
@@ -69,8 +70,8 @@ boss-call tail -n 30
 ```
 
 Then, in that repo, start any agent session the way you always do and say
-one thing: **follow the boss-call skill**. From then on it reads its mail,
-works, reports, and waits for the next mail on its own.
+**follow the boss-call skill**. From then on it reads its mail, works,
+reports, and waits for the next mail on its own.
 
 ## How delivery works
 
@@ -84,7 +85,9 @@ keyboard: they watch their normal TUI and can type over it at any time.
 
 The Boss does the same: answer mail, direct, `boss-call wait`. `boss-call
 status` shows who is `listening` right now, who took mail and is `working`,
-and who has `never listened`.
+and who has `never listened`. A `wait` called right after
+one's own fresh status returns at once with a reminder that a status is a
+report, not the end of a turn; the second call waits.
 
 ## The two rules
 
@@ -122,10 +125,9 @@ boss-call serve            # or --once, --session <id>, --poll 10
 ```
 
 Today `serve` and `peek-session` speak the kiso session format; `--profile` is
-the model profile, `--env-file` a `KEY=VALUE` file exported into the child. The
-extension in `kiso-extension.mjs` gives such a harness in-process `boss_read`
-and `boss_post` tools; `setup` links it only when `~/.kiso` exists. Other
-harnesses use the CLI through the skill; adapters for them are welcome.
+the model profile, `--env-file` a `KEY=VALUE` file exported into the child.
+Other harnesses use the CLI through the skill; a launcher template for them
+is welcome.
 
 ## Develop
 

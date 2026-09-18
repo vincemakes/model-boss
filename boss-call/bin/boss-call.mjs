@@ -2,11 +2,10 @@
 /**
  * boss-call — one Boss, several members, one line each.
  *
- *   boss-call setup                      link the skill (and extension) into every harness on this machine
+ *   boss-call setup                      link the skill into every harness on this machine
  *   boss-call host <room>                become the boss of a room
  *   boss-call join <room> --as <name>    join a room as a member; the current directory is your repo
  *   boss-call who                        which side you are on
- *   boss-call pause | resume             stop / restart being a member here (BOSS_CALL=off does it for one session)
  *   boss-call read [--ack]               unread mail for you
  *   boss-call wait [--timeout 25]        block until mail arrives (acknowledged), then print it
  *                                        (--timeout 590 with a 600 s shell-tool timeout: fewer empty returns)
@@ -22,7 +21,7 @@ import { existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } f
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BossCallError, ack, formatMessage, heartbeat, host, identify, isPaused, joinRoom, loadRoom, post, readMessages, resolveRoom, setPaused, status, unread, waitForMail } from "../src/mailbox.mjs";
+import { BossCallError, ack, formatMessage, heartbeat, host, identify, joinRoom, loadRoom, post, readMessages, resolveRoom, status, statusNudge, unread, waitForMail } from "../src/mailbox.mjs";
 import { peek } from "../src/peek.mjs";
 import { serve } from "../src/serve.mjs";
 
@@ -91,15 +90,18 @@ function cmdSetup() {
 		const r = link(PKG, join(home, ...d.at, "boss-call"));
 		console.log(`  ${r.padEnd(6)} ~/${d.at.join("/")}/boss-call  (${d.note})`);
 	}
-	if (existsSync(join(home, ".kiso"))) {
-		const r = link(join(PKG, "kiso-extension.mjs"), join(home, ".kiso", "extensions", "boss-call.mjs"));
-		console.log(`  ${r.padEnd(6)} ~/.kiso/extensions/boss-call.mjs`);
-	}
+	const oldExt = join(home, ".kiso", "extensions", "boss-call.mjs");
+	try {
+		if (lstatSync(oldExt).isSymbolicLink()) {
+			rmSync(oldExt);
+			console.log("  removed ~/.kiso/extensions/boss-call.mjs (entry is the repo's AGENTS.md now; no extension needed)");
+		}
+	} catch {}
 	if (!onPath("boss-call")) {
 		const r = link(join(PKG, "bin", "boss-call.mjs"), join(home, ".local", "bin", "boss-call"));
 		console.log(`  ${r.padEnd(6)} ~/.local/bin/boss-call  (add ~/.local/bin to PATH if it is not)`);
 	}
-	console.log("\nnext: the boss runs `boss-call host <room>`; each member runs `boss-call join <room> --as <name>` inside its repo.");
+	console.log("\nnext: the boss runs `boss-call host <room>`; each member runs `boss-call join <room> --as <name>` inside its repo.\nA session becomes a member only when the person says: follow the boss-call skill. Otherwise it is an ordinary session.");
 }
 
 function main(argv) {
@@ -135,7 +137,7 @@ function main(argv) {
 		case "status": {
 			const s = status(room);
 			console.log(`room ${room}: boss=${s.boss ?? "-"}  ${s.total} messages`);
-			for (const r of s.rows) console.log(`  ${r.role.padEnd(6)} ${r.name.padEnd(12)} unread=${String(r.unread).padStart(3)} asks=${String(r.asks).padStart(2)} ${(r.paused ? "PAUSED" : presence(r.heartbeat)).padEnd(22)} last-posted=${r.lastPosted ?? "-"}`);
+			for (const r of s.rows) console.log(`  ${r.role.padEnd(6)} ${r.name.padEnd(12)} unread=${String(r.unread).padStart(3)} asks=${String(r.asks).padStart(2)} ${presence(r.heartbeat).padEnd(22)} last-posted=${r.lastPosted ?? "-"}`);
 			return 0;
 		}
 		case "tail": {
@@ -156,6 +158,11 @@ function main(argv) {
 		case "wait": {
 			const { name } = identify(room, flags.me, flags.cwd);
 			const timeout = Number.parseInt(flags.timeout ?? "25", 10); // under every harness's shell-tool timeout (kiso: 30s)
+			const nudge = statusNudge(room, name);
+			if (nudge) {
+				console.log(nudge);
+				return 0;
+			}
 			const msgs = waitForMail(room, name, { timeoutMs: timeout * 1000, all: Boolean(flags.all) });
 			if (!msgs.length) {
 				console.log(`NO MAIL YET for ${name} after ${timeout}s. You are on the line only while this command runs.\nRun \`boss-call wait --timeout ${timeout}\` again NOW, with the same shell-tool timeout. Do not summarize, do not end your turn: an ended turn is a dropped line and nobody can call you back.`);
@@ -163,15 +170,6 @@ function main(argv) {
 			}
 			for (const m of msgs) console.log(formatMessage(m));
 			console.log(`(acked through #${msgs.at(-1).seq}. Act on it and keep working; post a status when a piece is done and continue at once. Run \`boss-call wait\` only when nothing is left to do.)`);
-			return 0;
-		}
-		case "pause":
-		case "resume": {
-			const { name } = identify(room, flags.me, flags.cwd);
-			setPaused(room, name, cmd === "pause");
-			console.log(cmd === "pause"
-				? `${name} paused in room ${room}: a kiso started here is an ordinary session until \`boss-call resume\` (a running one keeps its role until restarted)`
-				: `${name} resumed in room ${room}: the next kiso started here is the member again`);
 			return 0;
 		}
 		case "ack": {
@@ -229,7 +227,6 @@ function cmdWho({ room, me, cwd }) {
 	for (const [n, m] of Object.entries(data.members)) console.log(`  ${n.padEnd(12)} ${m.root ?? ""}`);
 	if (who.role === "member") console.log(`\nyou talk only to ${data.boss?.name}: \`boss-call post "..."\` goes there by default.`);
 	else if (who.role === "boss") console.log("\nyou may `post --to <member>` or `--to all`; members can only reach you.");
-	if (who.role !== "unknown" && isPaused(room, who.name)) console.log("\nPAUSED here: sessions started in this repo are ordinary until `boss-call resume`.");
 	if (who.role !== "unknown") console.log("to put an agent session started here on the line, tell it: follow the boss-call skill");
 	return 0;
 }

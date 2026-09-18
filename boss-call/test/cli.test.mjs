@@ -69,6 +69,7 @@ test("wait blocks until the boss posts, then prints acknowledged mail; status sh
 	const e = { ...process.env, BOSS_CALL_HOME: HOME, KISO_HOME };
 	delete e.BOSS_CALL_ROOM;
 	delete e.BOSS_CALL_ME;
+	bc(["wait", "--timeout", "1"], { cwd: A }); // alpha posted a status seconds ago: the first wait is the nudge, consumed here
 	const waiting = new Promise((res, rej) => execFile(process.execPath, [BIN, "wait", "--timeout", "10"], { cwd: A, env: e, encoding: "utf8" }, (err, out) => (err ? rej(err) : res(out))));
 	await new Promise((r) => setTimeout(r, 400));
 	assert.match(bc(["status"]), /member alpha\s+unread=\s+0 asks=\s+0 listening/);
@@ -77,4 +78,14 @@ test("wait blocks until the boss posts, then prints acknowledged mail; status sh
 	assert.match(out, /boss -> alpha \[msg\]\nnow do this/);
 	assert.match(out, /acked through #\d+\. Act on it and keep working/);
 	assert.match(bc(["wait", "--timeout", "1"], { cwd: A }), /NO MAIL YET for alpha after 1s/);
+});
+
+test("wait right after one's own fresh status returns the nudge once, then waits", () => {
+	bc(["post", "--kind", "status", "done X; next: Y"], { cwd: A });
+	const first = bc(["wait", "--timeout", "5"], { cwd: A });
+	assert.match(first, /You posted status #\d+ .*do that step now/);
+	const t0 = Date.now();
+	const second = bc(["wait", "--timeout", "1"], { cwd: A });
+	assert.match(second, /NO MAIL YET/);
+	assert.ok(Date.now() - t0 >= 900);
 });

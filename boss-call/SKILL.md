@@ -1,12 +1,13 @@
 ---
 name: boss-call
-description: Mailbox between a Boss agent session and its member sessions, with a blocking wait so sessions stay on the line without any loop or scheduler. Use when told "follow the boss-call skill", when you are a boss or a member of a boss-call room, or when a person asks you to check on, direct, or report to other agent sessions.
+description: Mailbox between a Boss agent session and its member sessions, with a blocking wait so sessions stay on the line without any loop or scheduler. Use when told "follow the boss-call skill" or /boss-call, when you are a boss or a member of a boss-call room, or when a person asks you to check on, direct, or report to other agent sessions.
 ---
 
 # boss-call
 
 One Boss, several members, one line each. Members talk only to the Boss; the
 Boss talks to one member or to all. Mail is files under `~/.boss-call/<room>/`.
+Everything is the `boss-call` CLI; no harness feature is needed.
 
 First find out which side you are on:
 
@@ -32,16 +33,15 @@ under it, so the call rarely comes back empty:
 
 - Claude Code: `boss-call wait --timeout 590` with the Bash tool's `timeout` 600000
 - kiso shell tool: `boss-call wait --timeout 590` with `timeoutMs` 600000
-- a tool with a fixed 30 s limit: `boss-call wait --timeout 25`
+- Codex, pi, opencode: their shell tool's maximum; unknown limit: `--timeout 25`
 
-If it does come back empty, run it again at once. **An ended turn is a
-dropped line: nobody can call you back.** Do not summarize and stop after an
-empty wait; the summary goes in your status post, before you wait. **Do not end your turn to
-wait; waiting is `boss-call wait`.** The person at this terminal can still
-type; if they do, their instruction wins.
+If it comes back empty, run it again at once. **An ended turn is a dropped
+line: nobody can call you back.** Do not summarize and stop after an empty
+wait; the summary goes in your status post, before you wait.
 
-If your harness gave you `boss_read` / `boss_post` / `boss_wait` tools, they
-are the same three verbs in-process; use them instead of the shell.
+**A status is a report, not a request for permission.** If your status names
+a next step, start that step in the same turn. `boss-call wait` right after
+your own fresh status comes back at once and says so; the second call waits.
 
 ## If you are a member
 
@@ -49,13 +49,12 @@ are the same three verbs in-process; use them instead of the shell.
 boss-call read --ack                       # at the start of a turn
 boss-call post --kind status "done: …; not done: …; blocked: …"
 boss-call post --kind ask "question? options: A / B; I prefer A"
-boss-call wait                             # then wait
+boss-call wait                             # only when nothing is left
 ```
 
 A status is ten lines of facts: done, explicitly not done, blocked on. No
-logs. **A status is not a request for permission**: if it names a next
-step, start that step at once. An ask is one decision you cannot make, with
-options and your preference; keep working on what does not depend on it.
+logs. An ask is one decision you cannot make, with options and your
+preference; keep working on what does not depend on it.
 
 ## If you are the boss
 
@@ -69,9 +68,9 @@ boss-call tail -n 30                        # the whole room, latest last
 boss-call wait                              # then wait for the next report
 ```
 
-`status` shows `listening` for a participant currently blocked in `wait`;
-`working 3m ago` means it took mail and has not come back to wait; `never
-listened` means no session has been put on the line there yet.
+`status` shows `listening` for a participant currently blocked in `wait`,
+`working 3m ago` for one that took mail and has not come back, `never
+listened` where no session has been put on the line.
 
 One matter per message. Facts and order, not encouragement. Answer every ask.
 
@@ -83,4 +82,5 @@ One matter per message. Facts and order, not encouragement. Answer every ask.
   person and says "waiting on the person" in its status. A boss never claims
   to authorize them.
 - **Stay on the line.** A session that ends its turn is off the line until a
-  person types again. Wait instead.
+  person types again. Wait instead. If your context is nearly exhausted, post
+  a status with the exact stopping point first, then wait.

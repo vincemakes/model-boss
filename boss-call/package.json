@@ -1,11 +1,11 @@
 {
   "name": "@vincemakes/boss-call",
   "version": "0.2.0",
-  "description": "One Boss, several agent sessions, one line each — a mailbox for agents that cannot type into each other's terminals. Works as a kiso extension, a Claude Code skill and a Codex skill.",
+  "description": "One Boss, several agent sessions, one line each — a mailbox for agents that cannot type into each other's terminals. A skill plus a CLI: works in Claude Code, Codex, pi, opencode and kiso through the repo's AGENTS.md / CLAUDE.md.",
   "license": "MIT",
   "type": "module",
   "bin": { "boss-call": "bin/boss-call.mjs" },
-  "files": ["bin", "src", "kiso-extension.mjs", "SKILL.md", "README.md"],
+  "files": ["bin", "src", "SKILL.md", "README.md"],
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "node --test"
