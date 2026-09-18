@@ -16,8 +16,8 @@ Canonical repository: [https://github.com/vincemakes/model-boss](https://github.
 
 | Skill | Say this | What it does |
 |---|---|---|
-| `boss-dispatch` | `让 opus 去写，你来审` · `走 model boss max` · `省token` · `分层干活` | Plans, dispatches a worker, gates the work, and audits the evidence while the inherited main loop keeps authority. This is the Model Boss orchestration skill, previously named `model-boss`. |
-| `boss-call` | `看看三个终端做得怎样` · `给 reelfo 发指令` | A single-line mailbox between one Boss and several member sessions; members report at the start of each turn. |
+| `boss-dispatch` | `have Opus implement it; you review` · `use Model Boss Max` · `save model tokens` · `split the work by model` | Plans, dispatches a worker, gates the work, and audits the evidence while the inherited main loop keeps authority. This is the Model Boss orchestration skill, previously named `model-boss`. |
+| `boss-call` | `check how the three sessions are doing` · `send reelfo the next instruction` | A single-line mailbox between one Boss and several member sessions; members report at the start of each turn. |
 
 The dispatch skill moved from the repository root into `boss-dispatch/` and its skill name changed `model-boss` → `boss-dispatch`; trigger phrases are unchanged, so re-run `bash boss-dispatch/install.sh` after updating.
 
@@ -50,14 +50,14 @@ The mailbox at `~/.boss-call/<room>/messages.jsonl` stores only messages deliber
 
 ## Usage
 
-After install (see the Claude Code and Codex setup sections below) there is no command to run — you invoke Model Boss conversationally. Phrases like `model boss`, `save model tokens`, or `分层干活` trigger the skill; then describe the topology you want:
+After install (see the Claude Code and Codex setup sections below) there is no command to run — you invoke Model Boss conversationally. Phrases like `model boss`, `save model tokens`, or `split the work by model` trigger the skill; then describe the topology you want:
 
 ```text
 use model boss: let sonnet implement the retry logic in src/http, you review   → Lite
-走 model boss,让 opus 去开发,你来审核                                           → Lite, `opus` = the newest Opus
+use model boss: let opus implement it, you review                             → Lite, `opus` = the newest Opus
 use model boss: let opus 4.6 implement, you review                             → Lite, worker pinned to Opus 4.6
 model boss max — have fable review the plan and the final diff                → Max
-走 model boss max,让 fable 审计划和最终 diff                                     → Max
+use model boss max: have fable review the plan and the final diff             → Max
 ```
 
 A spoken model name selects the matching route exactly; a version the catalog does not list (`fable 6`) stops with `needs_context` rather than a nearby guess.
@@ -173,7 +173,7 @@ The default Anthropic profile pins every model the Claude Code picker exposes to
 Defaults: reviewers `fable-5.1` then `opus-5` at `high`; workers `opus-5-worker` then `sonnet-5` at `xhigh`; scouts and mechanics `haiku-4.5`. Every route carries an `effort` (validated against the catalog, so `xhigh` on Opus 4.6 is a configuration error), a `quota_weight` (default `1.0`; raise it for the window you find scarcest) and optional spoken `aliases`. Effort is a spend control, not identity: the same model at two effort levels still collides for authority separation. Two helper commands back this up, neither of which touches a model:
 
 ```bash
-python3 <model-boss-skill-root>/scripts/model-boss.py match-models --profile anthropic --text "让 opus 4.6 去开发"
+python3 <model-boss-skill-root>/scripts/model-boss.py match-models --profile anthropic --text "have opus 4.6 implement it"
 python3 <model-boss-skill-root>/scripts/model-boss.py estimate --profile anthropic --main-model claude-fable-5-1 --main-effort medium --worker opus-5-worker --lines 800 --files 8 --judgment low --packets 2 --total-used 40 --fable-used 45 --week-elapsed 40
 ```
 
