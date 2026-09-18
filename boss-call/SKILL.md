@@ -45,6 +45,11 @@ your own fresh status comes back at once and says so; the second call waits.
 
 ## If you are a member
 
+On entry (the first turn after "follow the boss-call skill"): `boss-call who`,
+`boss-call read --ack`, then post ONE status line — where the repo stands
+(branch, unpushed commits, what you will do next or that nothing ungated is
+left) — so the boss sees you arrived. Then work or wait.
+
 ```bash
 boss-call read --ack                       # at the start of a turn
 boss-call post --kind status "done: …; not done: …; blocked: …"
